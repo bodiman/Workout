@@ -60,6 +60,7 @@
   .sets { margin: 0; padding: 0; list-style: none; }
   .sets li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
   .sets li:first-child { border-top: 0; }
+  .sets li.editing { display: grid; gap: 8px; justify-content: stretch; padding: 10px 0; }
   .sets .idx { color: var(--muted); font-size: 13px; width: 44px; display: inline-block; }
   .sets .num { font-size: 20px; }
   .pr { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--good); border: 1px solid var(--good); vertical-align: 2px; }
@@ -224,9 +225,20 @@ const targetFor = (e, ph) => e.t === 'skill' ? 'quality sets' : e.t === 'acc' ? 
 const SESSIONS = [];
 for (let w = 1; w <= PLAN.weeks; w++) PLAN.days.forEach((d, i) => SESSIONS.push({ key: `p3w${w}d${i + 1}`, week: w, day: i, ...d }));
 const phaseFor = w => PLAN.phases.find(p => w >= p.from && w <= p.to);
-const nextSession = () => SESSIONS.find(s => !state.done.includes(s.key)) || SESSIONS.at(-1);
-let currentKey = null; // session shown on the Log tab; defaults to the next unfinished one
-const current = () => SESSIONS.find(s => s.key === currentKey) || nextSession();
+// The workout after the furthest one you've finished (skipped workouts stay skipped).
+const nextSession = () => {
+  const last = Math.max(-1, ...state.done.map(k => SESSIONS.findIndex(s => s.key === k)));
+  return SESSIONS[Math.min(last + 1, SESSIONS.length - 1)];
+};
+let currentKey = null; // workout picked by hand on the Log tab
+// Shown workout: the one you picked, else the one you're logging today, else the next one.
+const current = () => {
+  const picked = SESSIONS.find(s => s.key === currentKey);
+  if (picked) return picked;
+  const todays = (state.days[todayISO()] || []).filter(t => t.session && !state.done.includes(t.session));
+  const active = todays.length && SESSIONS.find(s => s.key === todays.at(-1).session);
+  return active || nextSession();
+};
 
 // state.days: { 'YYYY-MM-DD': [{id, ex, w, r}] }, state.done: finished session keys
 let state = { unit: 'lb', days: {}, done: [] };
@@ -382,10 +394,30 @@ function renderPlates() {
 }
 
 /* ---------- rendering ---------- */
+let editingId = null; // set currently open for editing
 function setList(sets, prs) {
-  return '<ul class="sets">' + sets.map((s, i) => `
+  return '<ul class="sets">' + sets.map((s, i) => s.id === editingId ? setEditor(s, i) : `
     <li><span><span class="idx">Set ${i + 1}</span><span class="num">${s.w}</span> ${state.unit} × <span class="num">${s.r}</span>${prs.has(s.id) ? '<span class="pr">PR</span>' : ''}</span>
-    <button class="x" data-del="${s.id}" data-date="${s.date}" type="button" aria-label="Delete set ${i + 1}">Delete</button></li>`).join('') + '</ul>';
+    <button class="x" data-edit="${s.id}" type="button" aria-label="Edit set ${i + 1}">Edit</button></li>`).join('') + '</ul>';
+}
+function setEditor(s, i) {
+  return `<li class="editing" data-id="${s.id}" data-date="${s.date}">
+    <div class="eyebrow">Edit set ${i + 1}</div>
+    <div><label>Exercise</label><input class="e-ex" list="ex-list" value="${esc(s.ex)}" aria-label="Exercise"></div>
+    <div class="row">
+      <div><label>Weight (${state.unit})</label><input class="e-w" type="number" inputmode="decimal" step="any" min="0" value="${s.w}" aria-label="Weight"></div>
+      <div><label>Reps</label><input class="e-r" type="number" inputmode="numeric" min="1" value="${s.r}" aria-label="Reps"></div>
+    </div>
+    <div><label>Workout</label><select class="e-session" aria-label="Workout">
+      <option value="">Not part of the plan</option>
+      ${SESSIONS.map(o => `<option value="${o.key}"${o.key === s.session ? ' selected' : ''}>Week ${o.week} · ${o.when} ${o.name}</option>`).join('')}
+    </select></div>
+    <div class="row">
+      <button type="button" data-save>Save</button>
+      <button type="button" class="ghost" data-cancel>Cancel</button>
+      <button type="button" class="x shrink" data-del="${s.id}" data-date="${s.date}">Delete</button>
+    </div>
+  </li>`;
 }
 const volume = ss => ss.reduce((a, s) => a + s.w * s.r, 0).toLocaleString();
 
@@ -419,6 +451,9 @@ function renderSession() {
         <span>${esc(e.n)}${e.core ? '<span class="core">Core</span>' : ''}
           <span class="meta">${PLAN.sets} × ${targetFor(e, ph)} · ${last ? `Last: ${last.w} ${state.unit} × ${last.r}` : 'Not logged yet'}</span></span>
         <span class="count${n >= PLAN.sets ? ' full' : ''}">${Math.min(n, 9)}/${PLAN.sets}</span></button></li>`; }).join('')}
+    ${[...new Set(logged.map(t => t.ex))].filter(n => !s.ex.some(e => e.n.toLowerCase() === n.toLowerCase())).map(n => `
+      <li><button type="button" data-fill="${esc(n)}"><span>${esc(n)}<span class="meta">Extra, not in this workout's plan</span></span>
+        <span class="count">${logged.filter(t => t.ex === n).length}</span></button></li>`).join('')}
     </ul>
     <button type="button" id="finish" class="${done ? 'ghost' : ''}">${done ? 'Mark as not finished' : 'Finish workout'}</button>`;
 }
@@ -581,6 +616,24 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => { if (e.target.id === 'session-pick') { currentKey = e.target.value; render(); } });
 $('#w').addEventListener('input', renderPlates);
 
+// Edit a logged set: weight, reps, exercise, or which workout it counts toward.
+document.addEventListener('click', e => {
+  const open = e.target.closest('[data-edit]');
+  if (open) { editingId = Number(open.dataset.edit); render(); return; }
+  if (e.target.closest('[data-cancel]')) { editingId = null; render(); return; }
+  if (!e.target.closest('[data-save]')) return;
+  const li = e.target.closest('li.editing'), d = li.dataset.date, id = Number(li.dataset.id);
+  const ex = li.querySelector('.e-ex').value.trim(), w = parseFloat(li.querySelector('.e-w').value), r = parseInt(li.querySelector('.e-r').value, 10);
+  if (!ex) return li.querySelector('.e-ex').focus();
+  if (!(w >= 0)) return li.querySelector('.e-w').focus();
+  if (!(r > 0)) return li.querySelector('.e-r').focus();
+  const name = [...exercises(), ...planExercises()].find(n => n.toLowerCase() === ex.toLowerCase()) || ex;
+  const session = li.querySelector('.e-session').value || undefined;
+  state.days[d] = (state.days[d] || []).map(s => s.id === id ? { id, ex: name, w, r, ...(session ? { session } : {}) } : s);
+  editingId = null;
+  render(); saveDay(d); toast('Set updated');
+});
+
 // Two-tap delete: first tap arms the button, second tap deletes.
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-del]');
@@ -591,6 +644,7 @@ document.addEventListener('click', e => {
   state.days[d] = (state.days[d] || []).filter(s => s.id !== id);
   queue.deleted = [...new Set([...queue.deleted, id])];
   if (!state.days[d].length) delete state.days[d];
+  editingId = null;
   render(); saveDay(d); toast('Set deleted');
 });
 
