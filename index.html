@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Gym Log</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #16191d; --muted: #6b7280;
+    --line: #e3e6ea; --accent: #2563eb; --accent-text: #ffffff; --good: #16a34a; --danger: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --card: #1a1e24; --text: #e8eaed; --muted: #9aa1ab;
+      --line: #2a3038; --accent: #3b82f6; --accent-text: #ffffff; --good: #22c55e; --danger: #ef4444;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom));
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 4px 0 16px; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input, select {
+    width: 100%; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px; min-width: 0;
+  }
+  button {
+    font: inherit; border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer;
+    background: var(--accent); color: var(--accent-text); font-weight: 600;
+  }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 500; }
+  button.danger { background: transparent; color: var(--danger); border: 1px solid var(--line); font-weight: 500; }
+  button.x { background: transparent; color: var(--muted); padding: 4px 8px; font-weight: 400; }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  .row > * { flex: 1; }
+  .row > .shrink { flex: 0 0 auto; }
+  .sets { margin: 8px 0 0; padding: 0; list-style: none; }
+  .sets li { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+  .sets li:first-child { border-top: 0; }
+  .pr { color: var(--good); font-size: 12px; font-weight: 700; margin-left: 6px; }
+  nav {
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--card);
+    border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav button { flex: 1; background: transparent; color: var(--muted); border-radius: 0; padding: 16px 0; font-weight: 600; }
+  nav button.active { color: var(--accent); }
+  .hidden { display: none !important; }
+  .ex-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+  .stat { background: var(--bg); border-radius: 8px; padding: 8px; text-align: center; }
+  .stat b { display: block; font-size: 18px; }
+  svg { width: 100%; height: auto; display: block; }
+  .chart-line { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+  .chart-dot { fill: var(--accent); }
+  .chart-grid { stroke: var(--line); stroke-width: 1; }
+  .chart-label { fill: var(--muted); font-size: 11px; }
+  .empty { text-align: center; padding: 32px 0; }
+</style>
+</head>
+<body>
+<main>
+  <!-- LOG -->
+  <section id="view-log">
+    <h1>Today's workout</h1>
+    <div class="card">
+      <div style="margin-bottom:10px">
+        <label for="ex">Exercise</label>
+        <input id="ex" list="ex-list" placeholder="e.g. Bench Press" autocomplete="off">
+        <datalist id="ex-list"></datalist>
+      </div>
+      <div class="row">
+        <div><label for="w">Weight (<span class="unit">lb</span>)</label><input id="w" type="number" inputmode="decimal" step="any" min="0"></div>
+        <div><label for="r">Reps</label><input id="r" type="number" inputmode="numeric" min="1"></div>
+        <button class="shrink" id="add">Add set</button>
+      </div>
+    </div>
+    <div id="today"></div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="view-history" class="hidden">
+    <h1>History</h1>
+    <div id="history"></div>
+  </section>
+
+  <!-- PROGRESS -->
+  <section id="view-progress" class="hidden">
+    <h1>Progress</h1>
+    <div class="card">
+      <label for="pick">Exercise</label>
+      <select id="pick"></select>
+      <div id="progress"></div>
+    </div>
+    <div class="card">
+      <h2>Settings</h2>
+      <div class="row" style="margin-bottom:10px">
+        <div><label for="unit">Units</label>
+          <select id="unit"><option value="lb">lb</option><option value="kg">kg</option></select></div>
+      </div>
+      <div class="row">
+        <button class="ghost" id="export">Export</button>
+        <button class="ghost" id="import">Import</button>
+        <input id="file" type="file" accept="application/json" class="hidden">
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button data-view="log" class="active">Log</button>
+  <button data-view="history">History</button>
+  <button data-view="progress">Progress</button>
+</nav>
+
+<script>
+const KEY = 'gymlog.v1';
+const $ = (s) => document.querySelector(s);
+const today = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDate = (d) => new Date(d + 'T00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+// Epley estimated one-rep max
+const e1rm = (w, r) => r === 1 ? w : w * (1 + r / 30);
+const round = (n) => Math.round(n * 10) / 10;
+
+// State: { unit, sets: [{id, date, ex, w, r}] }
+let state = { unit: 'lb', sets: [] };
+try { state = { ...state, ...JSON.parse(localStorage.getItem(KEY)) }; } catch {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
+
+const exercises = () => [...new Set(state.sets.map(s => s.ex))].sort((a, b) => a.localeCompare(b));
+const byDate = () => {
+  const m = {};
+  for (const s of state.sets) (m[s.date] ||= []).push(s);
+  return Object.entries(m).sort((a, b) => b[0].localeCompare(a[0]));
+};
+const group = (sets) => {
+  const m = {};
+  for (const s of sets) (m[s.ex] ||= []).push(s);
+  return Object.entries(m);
+};
+// Best e1RM for an exercise before a given set id (to flag PRs)
+const isPR = (set) => {
+  const mine = e1rm(set.w, set.r);
+  return !state.sets.some(s => s.ex === set.ex && s.id < set.id && e1rm(s.w, s.r) >= mine);
+};
+
+function setList(sets, deletable) {
+  return '<ul class="sets">' + sets.map((s, i) => `
+    <li><span>Set ${i + 1}: <b>${s.w}</b> ${state.unit} × <b>${s.r}</b>${isPR(s) ? '<span class="pr">PR</span>' : ''}</span>
+    ${deletable ? `<button class="x" data-del="${s.id}" aria-label="Delete set">✕</button>` : ''}</li>`).join('') + '</ul>';
+}
+
+function renderLog() {
+  const sets = state.sets.filter(s => s.date === today());
+  $('#today').innerHTML = sets.length
+    ? group(sets).map(([ex, ss]) => `<div class="card"><div class="ex-head"><h2>${esc(ex)}</h2>
+        <span class="muted">${ss.reduce((a, s) => a + s.w * s.r, 0).toLocaleString()} ${state.unit} vol</span></div>
+        ${setList(ss, true)}</div>`).join('')
+    : '<p class="muted empty">No sets yet today. Go lift something.</p>';
+  $('#ex-list').innerHTML = exercises().map(e => `<option value="${esc(e)}">`).join('');
+}
+
+function renderHistory() {
+  const days = byDate();
+  $('#history').innerHTML = days.length
+    ? days.map(([d, sets]) => `<div class="card"><div class="ex-head"><h2>${fmtDate(d)}</h2>
+        <span class="muted">${sets.length} sets</span></div>
+        ${group(sets).map(([ex, ss]) => `<div style="margin-top:8px"><b>${esc(ex)}</b>${setList(ss, true)}</div>`).join('')}
+      </div>`).join('')
+    : '<p class="muted empty">Nothing logged yet.</p>';
+}
+
+function renderProgress() {
+  const exs = exercises();
+  const pick = $('#pick');
+  const current = pick.value;
+  pick.innerHTML = exs.map(e => `<option>${esc(e)}</option>`).join('');
+  if (exs.includes(current)) pick.value = current;
+  const ex = pick.value;
+  if (!ex) { $('#progress').innerHTML = '<p class="muted empty">Log some sets to see progress.</p>'; return; }
+
+  const sets = state.sets.filter(s => s.ex === ex);
+  const days = {};
+  for (const s of sets) days[s.date] = Math.max(days[s.date] || 0, e1rm(s.w, s.r));
+  const pts = Object.entries(days).sort((a, b) => a[0].localeCompare(b[0]));
+  const best = sets.reduce((b, s) => e1rm(s.w, s.r) > e1rm(b.w, b.r) ? s : b);
+  const heaviest = Math.max(...sets.map(s => s.w));
+
+  $('#progress').innerHTML = `
+    <div class="stats">
+      <div class="stat"><b>${round(e1rm(best.w, best.r))}</b><span class="muted">est. 1RM</span></div>
+      <div class="stat"><b>${heaviest}</b><span class="muted">heaviest</span></div>
+      <div class="stat"><b>${pts.length}</b><span class="muted">sessions</span></div>
+    </div>
+    ${chart(pts)}
+    <p class="muted">Best set: ${best.w} ${state.unit} × ${best.r} on ${fmtDate(best.date)}. Chart shows estimated 1RM per session.</p>`;
+}
+
+function chart(pts) {
+  if (pts.length < 2) return '<p class="muted">Log this exercise on at least two days to see a chart.</p>';
+  const W = 320, H = 160, P = { l: 36, r: 8, t: 10, b: 22 };
+  const ys = pts.map(p => p[1]);
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (hi === lo) { hi += 5; lo -= 5; }
+  const pad = (hi - lo) * 0.1; lo -= pad; hi += pad;
+  const x = i => P.l + (i / (pts.length - 1)) * (W - P.l - P.r);
+  const y = v => P.t + (1 - (v - lo) / (hi - lo)) * (H - P.t - P.b);
+  const grid = [lo, (lo + hi) / 2, hi].map(v =>
+    `<line class="chart-grid" x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}"/>
+     <text class="chart-label" x="${P.l - 4}" y="${y(v) + 4}" text-anchor="end">${Math.round(v)}</text>`).join('');
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p[1])}`).join(' ');
+  const short = s => new Date(s + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Estimated 1RM over time">
+    ${grid}<path class="chart-line" d="${d}"/>
+    ${pts.map((p, i) => `<circle class="chart-dot" cx="${x(i)}" cy="${y(p[1])}" r="3"><title>${p[0]}: ${round(p[1])}</title></circle>`).join('')}
+    <text class="chart-label" x="${P.l}" y="${H - 4}">${short(pts[0][0])}</text>
+    <text class="chart-label" x="${W - P.r}" y="${H - 4}" text-anchor="end">${short(pts.at(-1)[0])}</text>
+  </svg>`;
+}
+
+function render() {
+  document.querySelectorAll('.unit').forEach(el => el.textContent = state.unit);
+  $('#unit').value = state.unit;
+  renderLog(); renderHistory(); renderProgress();
+}
+
+function addSet() {
+  const ex = $('#ex').value.trim();
+  const w = parseFloat($('#w').value), r = parseInt($('#r').value, 10);
+  if (!ex) return $('#ex').focus();
+  if (!(w >= 0)) return $('#w').focus();
+  if (!(r > 0)) return $('#r').focus();
+  // Reuse existing casing if the exercise already exists
+  const name = exercises().find(e => e.toLowerCase() === ex.toLowerCase()) || ex;
+  state.sets.push({ id: Date.now(), date: today(), ex: name, w, r });
+  save(); render();
+  $('#r').focus(); $('#r').select();
+}
+
+$('#add').onclick = addSet;
+['#w', '#r'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') addSet(); }));
+
+// When picking a known exercise, prefill last weight/reps
+$('#ex').addEventListener('change', () => {
+  const name = $('#ex').value.trim().toLowerCase();
+  const last = [...state.sets].reverse().find(s => s.ex.toLowerCase() === name);
+  if (last) { $('#w').value = last.w; $('#r').value = last.r; }
+});
+
+document.addEventListener('click', e => {
+  const id = e.target.dataset?.del;
+  if (id && confirm('Delete this set?')) {
+    state.sets = state.sets.filter(s => s.id !== Number(id));
+    save(); render();
+  }
+});
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(n => n.classList.toggle('active', n === b));
+  document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hidden', s.id !== 'view-' + b.dataset.view));
+  window.scrollTo(0, 0);
+});
+
+$('#pick').onchange = renderProgress;
+$('#unit').onchange = e => { state.unit = e.target.value; save(); render(); };
+
+$('#export').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
+  a.download = `gym-log-${today()}.json`;
+  a.click();
+};
+$('#import').onclick = () => $('#file').click();
+$('#file').onchange = async e => {
+  try {
+    const data = JSON.parse(await e.target.files[0].text());
+    if (!Array.isArray(data.sets)) throw 0;
+    if (confirm(`Replace current data with ${data.sets.length} imported sets?`)) { state = { unit: 'lb', ...data }; save(); render(); }
+  } catch { alert('That file doesn\'t look like a Gym Log export.'); }
+  e.target.value = '';
+};
+
+render();
+</script>
+</body>
+</html>
