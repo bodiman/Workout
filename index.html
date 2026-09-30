@@ -425,11 +425,13 @@ const volume = ss => ss.reduce((a, s) => a + s.w * s.r, 0).toLocaleString();
 function renderLog(prs) {
   const d = todayISO();
   $('#today-label').textContent = fmtDate(d);
-  const sets = (state.days[d] || []).map(s => ({ ...s, date: d }));
+  // Only the sets logged under the workout shown above, in the plan's exercise order.
+  const w = current(), sets = sessionSets(w.key);
+  const order = ex => { const i = w.ex.findIndex(e => e.n.toLowerCase() === ex.toLowerCase()); return i < 0 ? 99 : i; };
   $('#today').innerHTML = sets.length
-    ? group(sets).map(([ex, ss]) => `<div class="card"><div class="head"><h2>${esc(ex)}</h2>
+    ? group(sets).sort((x, y) => order(x[0]) - order(y[0])).map(([ex, ss]) => `<div class="card"><div class="head"><h2>${esc(ex)}</h2>
         <span class="muted">${volume(ss)} ${state.unit} volume</span></div>${setList(ss, prs)}</div>`).join('')
-    : `<div class="card empty"><h2>No sets yet today</h2><p class="muted" style="margin:0">Type an exercise, weight and reps above, then tap Add set. Your sets show up here.</p></div>`;
+    : `<div class="card empty"><h2>No sets logged for this workout</h2><p class="muted" style="margin:0">Tap an exercise above or type one in, then tap Add set. Sets for week ${w.week} ${esc(w.name)} show up here.</p></div>`;
   const names = [...new Set([...planExercises(), ...exercises()])].sort((a, b) => a.localeCompare(b));
   $('#ex-list').innerHTML = names.map(e => `<option value="${esc(e)}">`).join('');
 }
