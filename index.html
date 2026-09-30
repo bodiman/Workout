@@ -131,7 +131,7 @@
       </div>
       <div class="row">
         <div><label for="w">Weight (<span class="unit">lb</span>)</label><input id="w" type="number" inputmode="decimal" step="any" min="0"></div>
-        <div><label for="r">Reps</label><input id="r" type="number" inputmode="numeric" min="1"></div>
+        <div><label for="r">Reps<span id="r-target"></span></label><input id="r" type="number" inputmode="numeric" min="1"></div>
         <button class="shrink" id="add" type="submit">Add set</button>
       </div>
       <div class="plates" id="plates" aria-live="polite"></div>
@@ -586,6 +586,9 @@ function updatePlaceholders() {
   const name = $('#ex').value.trim() || $('#ex').placeholder, last = lastSet(name);
   $('#w').placeholder = last ? last.w : PLATES[state.unit].bar;
   $('#r').placeholder = last ? last.r : defaultReps(name);
+  // Always show this week's target for the exercise, even when the preview is your last set.
+  const w = current(), e = w.ex.find(x => x.n.toLowerCase() === name.toLowerCase());
+  $('#r-target').textContent = e && e.t !== 'skill' ? ` (${targetFor(e, phaseFor(w.week)).replace(' reps', '')})` : '';
   renderPlates();
 }
 
