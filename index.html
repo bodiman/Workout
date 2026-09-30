@@ -326,7 +326,7 @@ async function connect() {
     col.onSnapshot(snap => {
       const days = {}; let unit = 'lb', done = [];
       for (const doc of snap.docs) {
-        const b = doc.data();
+        const b = structuredClone(doc.data()); // snapshots are read-only; keep an editable copy
         if (doc.id === 'settings') { unit = b.unit || unit; done = Array.isArray(b.done) ? b.done : []; }
         else if (doc.id.startsWith('day-') && Array.isArray(b.sets)) days[b.date] = b.sets;
       }
@@ -552,7 +552,7 @@ $('#add-form').addEventListener('submit', e => {
   if (!(r > 0)) return $('#r').focus();
   const name = [...exercises(), ...planExercises()].find(n => n.toLowerCase() === ex.toLowerCase()) || ex;
   const d = todayISO();
-  (state.days[d] ||= []).push({ id: Date.now() * 1000 + Math.floor(Math.random() * 1000), ex: name, w, r, session: current().key });
+  state.days[d] = [...(state.days[d] || []), { id: Date.now() * 1000 + Math.floor(Math.random() * 1000), ex: name, w, r, session: current().key }];
   $('#ex').value = $('#w').value = $('#r').value = '';
   render(); saveDay(d);
 });
