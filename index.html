@@ -102,6 +102,7 @@
   .plan-list .meta { font-size: 13px; color: var(--muted); display: block; font-weight: 400; }
   .count { flex: 0 0 auto; font: 700 16px var(--display); font-variant-numeric: tabular-nums; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
   .count.full { color: var(--good); border-color: var(--good); }
+  .confirm-box { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--accent); border-radius: 8px; }
   .phase { background: var(--field); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
   .weeks { display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 6px; align-items: center; }
   .weeks .wk { font: 700 15px var(--display); color: var(--muted); padding-right: 4px; }
@@ -393,6 +394,7 @@ function renderPlates() {
 }
 
 /* ---------- rendering ---------- */
+let confirmFinish = null; // workout whose Finish button is waiting for confirmation
 let editingId = null; // set currently open for editing
 function setList(sets, prs) {
   return '<ul class="sets">' + sets.map((s, i) => s.id === editingId ? setEditor(s, i) : `
@@ -454,7 +456,14 @@ function renderSession() {
       <li><button type="button" data-fill="${esc(n)}"><span>${esc(n)}<span class="meta">Extra, not in this workout's plan</span></span>
         <span class="count">${logged.filter(t => t.ex === n).length}</span></button></li>`).join('')}
     </ul>
-    <button type="button" id="finish" class="${done ? 'ghost' : ''}">${done ? 'Mark as not finished' : 'Finish workout'}</button>`;
+    ${confirmFinish !== s.key
+      ? `<button type="button" id="finish" class="${done ? 'ghost' : ''}">${done ? 'Mark as not finished' : 'Finish workout'}</button>`
+      : `<div class="confirm-box" role="alert">
+          <div>${done ? `Reopen week ${s.week} ${s.name}? It will count as not finished.`
+            : `Finish week ${s.week} ${s.name}? You've logged ${s.ex.reduce((a, e) => a + Math.min(count(e.n), PLAN.sets), 0)} of ${s.ex.length * PLAN.sets} planned sets.`}</div>
+          <div class="row"><button type="button" id="finish-yes">${done ? 'Reopen' : 'Finish'}</button>
+            <button type="button" class="ghost" id="finish-no">Cancel</button></div>
+        </div>`}`;
 }
 
 function renderPlan() {
@@ -606,8 +615,11 @@ document.addEventListener('click', e => {
   }
   const go = e.target.closest('[data-go]');
   if (go) { state.current = go.dataset.go; render(); saveSettings(); showView('log'); return; }
-  if (e.target.closest('#finish')) {
+  if (e.target.closest('#finish')) { confirmFinish = current().key; render(); return; }
+  if (e.target.closest('#finish-no')) { confirmFinish = null; render(); return; }
+  if (e.target.closest('#finish-yes')) {
     const s = current();
+    confirmFinish = null;
     if (state.done.includes(s.key)) { state.done = state.done.filter(k => k !== s.key); state.current = s.key; }
     else { state.done = [...state.done, s.key]; state.current = nextSession().key; toast(`${s.name} finished. Next up: ${nextSession().name}, week ${nextSession().week}.`); }
     render(); saveSettings();
