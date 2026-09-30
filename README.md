@@ -14,7 +14,7 @@ Upper/lower split, 4 days a week (Mon / Tue / Thu / Fri), 2 sets per exercise. B
 | Seated Cable Row | Lying Leg Curl | Seated Dumbbell Shoulder Press | Seated Leg Curl |
 | Lateral Raise | Standing Calf Raise | Chest-Supported Row | Hip Thrust |
 | Triceps Pushdown | Hanging Leg Raise | Face Pull | Seated Calf Raise |
-| EZ-Bar Curl | | Hammer Curl | Cable Crunch |
+| Preacher Curl | | Hammer Curl | Cable Crunch |
 
 | Weeks | Reps | Effort |
 |---|---|---|
