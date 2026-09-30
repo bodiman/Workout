@@ -101,7 +101,7 @@
   .count { flex: 0 0 auto; font: 700 16px var(--display); font-variant-numeric: tabular-nums; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
   .count.full { color: var(--good); border-color: var(--good); }
   .phase { background: var(--field); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
-  .weeks { display: grid; grid-template-columns: auto repeat(4, 1fr); gap: 6px; align-items: center; }
+  .weeks { display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 6px; align-items: center; }
   .weeks .wk { font: 700 15px var(--display); color: var(--muted); padding-right: 4px; }
   .weeks .colhead { font-size: 12px; color: var(--muted); text-align: center; font-weight: 600; }
   .sess { min-width: 0; padding: 8px 2px; font: 600 13px var(--display); letter-spacing: 0; white-space: nowrap; background: var(--field); color: var(--fg); border: 1px solid var(--line); }
@@ -192,31 +192,36 @@ const fmtDate = d => new Date(d + 'T00:00').toLocaleDateString(undefined, { week
 const e1rm = (w, r) => r === 1 ? w : w * (1 + r / 30); // Epley
 const round = n => Math.round(n * 10) / 10;
 
-/* ---------- the 8-week plan: upper/lower, 4 days a week, 2 sets per exercise ---------- */
+/* ---------- the 8-week plan: 3 gym days around gymnastics and climbing, 2 sets per exercise ---------- */
+// Exercise types: 'heavy' and 'moderate' lifts follow the weekly phases below; 'acc' accessories keep
+// a fixed rep range; 'skill' is logged however you perform it.
 const PLAN = {
   weeks: 8,
   sets: 2,
   days: [
-    { name: 'Upper A', when: 'Mon', focus: 'Chest, back, triceps, biceps', ex: [
-      ['Bench Press', true], ['Lat Pulldown', true], ['Zanetti Press', true],
-      ['Seated Cable Row'], ['Lateral Raise'], ['Triceps Pushdown'], ['Preacher Curl'] ] },
-    { name: 'Lower A', when: 'Tue', focus: 'Squat pattern, hamstrings, calves', ex: [
-      ['Back Squat'], ['Romanian Deadlift'], ['Leg Press'], ['Lying Leg Curl'], ['Standing Calf Raise'], ['Hanging Leg Raise'] ] },
-    { name: 'Upper B', when: 'Thu', focus: 'Chest, back, shoulders, arms', ex: [
-      ['Bench Press', true], ['Lat Pulldown', true], ['Zanetti Press', true],
-      ['Seated Dumbbell Shoulder Press'], ['Chest-Supported Row'], ['Face Pull'], ['Hammer Curl'] ] },
-    { name: 'Lower B', when: 'Fri', focus: 'Hinge pattern, single-leg, quads', ex: [
-      ['Trap Bar Deadlift'], ['Bulgarian Split Squat'], ['Leg Extension'], ['Seated Leg Curl'], ['Hip Thrust'], ['Seated Calf Raise'], ['Cable Crunch'] ] },
+    { name: 'Legs', when: 'Mon', note: 'After gymnastics', focus: 'Squat pattern, hamstrings, lower legs', ex: [
+      { n: 'Back Squat', t: 'heavy' }, { n: 'Romanian Deadlift', t: 'moderate' }, { n: 'Bulgarian Split Squat', t: 'moderate' },
+      { n: 'Standing Calf Raise', t: 'acc', reps: '10–15' }, { n: 'Tibialis Raise', t: 'acc', reps: '15–20' } ] },
+    { name: 'Upper', when: 'Fri', note: 'Heavy day', focus: 'Heavy pressing and pulling, shoulder care', ex: [
+      { n: 'Bench Press', t: 'heavy', core: true }, { n: 'Lat Pulldown', t: 'heavy', core: true }, { n: 'Zanetti Press', t: 'skill', core: true },
+      { n: 'Incline Dumbbell Press', t: 'acc', reps: '8–12' }, { n: 'Lateral Raise', t: 'acc', reps: '12–20' },
+      { n: 'External Rotation', t: 'acc', reps: '15–20' }, { n: 'Preacher Curl', t: 'acc', reps: '10–12' } ] },
+    { name: 'Full Body', when: 'Sun', note: 'Lighter pressing and pulling, heavy hinge', focus: 'Deadlift, volume pressing, elbow care', ex: [
+      { n: 'Paused Bench Press', t: 'moderate', core: true }, { n: 'Single-Arm Lat Pulldown', t: 'moderate', core: true }, { n: 'Zanetti Press', t: 'skill', core: true },
+      { n: 'Trap Bar Deadlift', t: 'heavy' }, { n: 'Overhead Press', t: 'moderate' }, { n: 'Face Pull', t: 'acc', reps: '15–20' },
+      { n: 'Hammer Curl', t: 'acc', reps: '10–12' }, { n: 'Reverse Wrist Curl', t: 'acc', reps: '15–20' } ] },
   ],
-  // Rep ranges step down as weights go up. Add weight once you hit the top of the range on both sets.
+  // Rep targets for the phased lifts. Hit the top of the range on both sets, then add weight next time.
   phases: [
-    { from: 1, to: 3, reps: '10–12', effort: 'Stop 2 reps short of failure' },
-    { from: 4, to: 6, reps: '8–10', effort: 'Stop 1–2 reps short of failure' },
-    { from: 7, to: 8, reps: '6–8', effort: 'Last set to 0–1 reps short of failure' },
+    { from: 1, to: 3, heavy: '6–8', moderate: '10–12', note: 'Build in. Stop 2 reps short of failure on heavy and moderate lifts; accessories can go to failure.' },
+    { from: 4, to: 4, heavy: '6–8', moderate: '10–12', deload: true, note: 'Lighter week. Use about 85–90% of last week’s weights and stop 3 reps short. Let your elbows and shoulders catch up.' },
+    { from: 5, to: 6, heavy: '5–6', moderate: '8–10', note: 'Heavier. Stop 1–2 reps short of failure on heavy and moderate lifts.' },
+    { from: 7, to: 8, heavy: '3–5', moderate: '6–8', note: 'Heaviest block. Stop 1–2 reps short and never grind out a rep.' },
   ],
 };
+const targetFor = (e, ph) => e.t === 'skill' ? 'quality sets' : e.t === 'acc' ? `${e.reps} reps` : `${ph[e.t]} reps`;
 const SESSIONS = [];
-for (let w = 1; w <= PLAN.weeks; w++) PLAN.days.forEach((d, i) => SESSIONS.push({ key: `w${w}d${i + 1}`, week: w, day: i, ...d }));
+for (let w = 1; w <= PLAN.weeks; w++) PLAN.days.forEach((d, i) => SESSIONS.push({ key: `p3w${w}d${i + 1}`, week: w, day: i, ...d }));
 const phaseFor = w => PLAN.phases.find(p => w >= p.from && w <= p.to);
 const nextSession = () => SESSIONS.find(s => !state.done.includes(s.key)) || SESSIONS.at(-1);
 let currentKey = null; // session shown on the Log tab; defaults to the next unfinished one
@@ -346,7 +351,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) conn
 /* ---------- derived data ---------- */
 const allSets = () => Object.entries(state.days).flatMap(([date, ss]) => ss.map(s => ({ ...s, date })));
 const exercises = () => [...new Set(allSets().map(s => s.ex))].sort((a, b) => a.localeCompare(b));
-const planExercises = () => [...new Set(PLAN.days.flatMap(d => d.ex.map(e => e[0])))];
+const planExercises = () => [...new Set(PLAN.days.flatMap(d => d.ex.map(e => e.n)))];
 const lastSet = name => allSets().filter(s => s.ex.toLowerCase() === name.toLowerCase())
   .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id).pop();
 const group = sets => { const m = {}; for (const s of sets) (m[s.ex] ||= []).push(s); return Object.entries(m); };
@@ -400,17 +405,17 @@ function renderSession() {
   const count = name => todays.filter(t => t.ex.toLowerCase() === name.toLowerCase()).length;
   $('#session').innerHTML = `
     <div class="head">
-      <div><div class="eyebrow">Week ${s.week} of ${PLAN.weeks} · Day ${s.day + 1} of 4${done ? ' · Finished' : ''}</div><h2>${s.name}</h2></div>
+      <div><div class="eyebrow">Week ${s.week} of ${PLAN.weeks} · ${s.when}${ph.deload ? ' · Lighter week' : ''}${done ? ' · Finished' : ''}</div><h2>${s.name}</h2><div class="muted">${s.note}</div></div>
       <select id="session-pick" aria-label="Choose session" style="width:auto">
-        ${SESSIONS.map(o => `<option value="${o.key}"${o.key === s.key ? ' selected' : ''}>W${o.week} · ${o.name}${state.done.includes(o.key) ? ' ✓' : ''}</option>`).join('')}
+        ${SESSIONS.map(o => `<option value="${o.key}"${o.key === s.key ? ' selected' : ''}>W${o.week} · ${o.when} ${o.name}${state.done.includes(o.key) ? ' ✓' : ''}</option>`).join('')}
       </select>
     </div>
-    <div class="phase"><b>${PLAN.sets} sets × ${ph.reps} reps.</b> ${ph.effort}. When you hit ${ph.reps.split('–')[1]} reps on both sets, add weight next time.</div>
-    <ul class="plan-list">${s.ex.map(([name, core]) => {
-      const n = count(name), last = lastSet(name);
-      return `<li><button type="button" data-fill="${esc(name)}">
-        <span>${esc(name)}${core ? '<span class="core">Core</span>' : ''}
-          <span class="meta">${last ? `Last: ${last.w} ${state.unit} × ${last.r}` : 'No sets logged yet'}</span></span>
+    <div class="phase"><b>${PLAN.sets} sets of everything.</b> ${ph.note} Hit the top of the rep range on both sets, then add weight next time.</div>
+    <ul class="plan-list">${s.ex.map(e => {
+      const n = count(e.n), last = lastSet(e.n);
+      return `<li><button type="button" data-fill="${esc(e.n)}">
+        <span>${esc(e.n)}${e.core ? '<span class="core">Core</span>' : ''}
+          <span class="meta">${PLAN.sets} × ${targetFor(e, ph)} · ${last ? `Last: ${last.w} ${state.unit} × ${last.r}` : 'Not logged yet'}</span></span>
         <span class="count${n >= PLAN.sets ? ' full' : ''}">${Math.min(n, 9)}/${PLAN.sets}</span></button></li>`; }).join('')}
     </ul>
     <button type="button" id="finish" class="${done ? 'ghost' : ''}">${done ? 'Mark as not finished' : 'Finish workout'}</button>`;
@@ -425,13 +430,14 @@ function renderPlan() {
       ${Array.from({ length: PLAN.weeks }, (_, i) => `<span class="wk">W${i + 1}</span>` +
         SESSIONS.filter(s => s.week === i + 1).map(s => `<button type="button" data-go="${s.key}"
           class="sess${state.done.includes(s.key) ? ' done' : ''}${s.key === cur ? ' current' : ''}"
-          aria-label="Week ${s.week} ${s.name}${state.done.includes(s.key) ? ', finished' : ''}">${s.name}</button>`).join('')).join('')}
+          aria-label="Week ${s.week} ${s.when} ${s.name}${state.done.includes(s.key) ? ', finished' : ''}">${s.name}</button>`).join('')).join('')}
     </div>
-    <div style="display:grid;gap:6px">${PLAN.phases.map(p => `<div class="phase"><b>Weeks ${p.from}–${p.to}:</b> ${PLAN.sets} sets × ${p.reps} reps. ${p.effort}.</div>`).join('')}</div>`;
+    <div style="display:grid;gap:6px">${PLAN.phases.map(p => `<div class="phase"><b>${p.from === p.to ? 'Week ' + p.from : `Weeks ${p.from}–${p.to}`}:</b> heavy lifts ${p.heavy}, moderate lifts ${p.moderate} reps. ${p.note}</div>`).join('')}</div>`;
   $('#plan-days').innerHTML = PLAN.days.map(d => `<div class="card template">
-      <div class="head"><h2>${d.name}</h2><span class="muted">${d.when} · ${d.focus}</span></div>
-      <ol>${d.ex.map(([n, core]) => `<li>${esc(n)}${core ? '<span class="core">Core</span>' : ''}</li>`).join('')}</ol>
-    </div>`).join('');
+      <div class="head"><h2>${d.when} · ${d.name}</h2><span class="muted">${d.note}</span></div>
+      <div class="muted">${d.focus}</div>
+      <ol>${d.ex.map(e => `<li>${esc(e.n)}${e.core ? '<span class="core">Core</span>' : ''} <span class="muted">${e.t === 'acc' ? e.reps : e.t === 'skill' ? 'as you perform it' : e.t + ' (phased)'}</span></li>`).join('')}</ol>
+    </div>`).join('') + `<p class="muted" style="margin:0">Gymnastics Mon, Tue and Thu (legs follow Monday's session). Climbing Wed and some Saturdays. Rows and core work are left out on purpose, since your sports already cover them.</p>`;
 }
 
 function showView(name) {
