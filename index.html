@@ -45,6 +45,7 @@
     border: 1px solid var(--line); border-radius: 8px; padding: 10px 11px;
   }
   input[type=number] { font: 700 22px var(--display); font-variant-numeric: tabular-nums; padding-block: 7px; }
+  input::placeholder { color: var(--muted); opacity: .8; }
   input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   button { font: 600 15px var(--body); border: 0; border-radius: 8px; padding: 11px 14px; cursor: pointer; background: var(--accent); color: var(--on-accent); }
   button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); font-weight: 500; }
@@ -123,12 +124,12 @@
     <form class="card" id="add-form" autocomplete="off">
       <div>
         <label for="ex">Exercise</label>
-        <input id="ex" list="ex-list" placeholder="Bench Press" enterkeyhint="next">
+        <input id="ex" list="ex-list" enterkeyhint="next">
         <datalist id="ex-list"></datalist>
       </div>
       <div class="row">
-        <div><label for="w">Weight (<span class="unit">lb</span>)</label><input id="w" type="number" inputmode="decimal" step="any" min="0" placeholder="135"></div>
-        <div><label for="r">Reps</label><input id="r" type="number" inputmode="numeric" min="1" placeholder="8"></div>
+        <div><label for="w">Weight (<span class="unit">lb</span>)</label><input id="w" type="number" inputmode="decimal" step="any" min="0"></div>
+        <div><label for="r">Reps</label><input id="r" type="number" inputmode="numeric" min="1"></div>
         <button class="shrink" id="add" type="submit">Add set</button>
       </div>
       <div class="plates" id="plates" aria-live="polite"></div>
@@ -370,7 +371,7 @@ const PLATES = {
   kg: { bar: 20, list: [[25,'red'],[20,'blue'],[15,'yellow'],[10,'green'],[5,'white'],[2.5,'black'],[1.25,'black']] },
 };
 function renderPlates() {
-  const w = parseFloat($('#w').value), cfg = PLATES[state.unit];
+  const w = formValues().w, cfg = PLATES[state.unit];
   const el = $('#plates');
   if (!(w > cfg.bar)) { el.innerHTML = w === cfg.bar ? 'Empty bar.' : `Barbell math assumes a ${cfg.bar} ${state.unit} bar.`; return; }
   let side = (w - cfg.bar) / 2; const out = [];
@@ -506,41 +507,65 @@ function render() {
   document.querySelectorAll('.unit').forEach(el => el.textContent = state.unit);
   $('#unit').value = state.unit;
   const prs = prIds();
-  renderSession(); renderPlan(); renderLog(prs); renderHistory(prs); renderProgress(); renderPlates();
+  renderSession(); renderPlan(); renderLog(prs); renderHistory(prs); renderProgress(); updatePlaceholders();
 }
 
 let toastTimer;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 3500); }
 
 /* ---------- actions ---------- */
+/* ---------- form preview text ----------
+   Blank fields show the previous set as grey preview text and use it when you tap Add set.
+   Exercise: the one you just logged (until its sets are done), else the next unfinished plan exercise.
+   Weight and reps: your last set of that exercise, else the empty bar and the bottom of the target range. */
+function suggestedExercise() {
+  const todays = state.days[todayISO()] || [];
+  const done = name => todays.filter(t => t.ex.toLowerCase() === name.toLowerCase()).length >= PLAN.sets;
+  const prev = todays.at(-1);
+  if (prev && !done(prev.ex)) return prev.ex;
+  const s = current();
+  return (s.ex.find(e => !done(e.n)) || s.ex[0]).n;
+}
+function defaultReps(name) {
+  const s = current(), e = s.ex.find(x => x.n.toLowerCase() === name.toLowerCase());
+  if (!e || e.t === 'skill') return 5;
+  return parseInt(e.t === 'acc' ? e.reps : phaseFor(s.week)[e.t], 10);
+}
+const formValues = () => {
+  const ex = $('#ex').value.trim() || $('#ex').placeholder;
+  return { ex, w: parseFloat($('#w').value || $('#w').placeholder), r: parseInt($('#r').value || $('#r').placeholder, 10) };
+};
+function updatePlaceholders() {
+  $('#ex').placeholder = suggestedExercise();
+  const name = $('#ex').value.trim() || $('#ex').placeholder, last = lastSet(name);
+  $('#w').placeholder = last ? last.w : PLATES[state.unit].bar;
+  $('#r').placeholder = last ? last.r : defaultReps(name);
+  renderPlates();
+}
+
 $('#add-form').addEventListener('submit', e => {
   e.preventDefault();
-  const ex = $('#ex').value.trim(), w = parseFloat($('#w').value), r = parseInt($('#r').value, 10);
+  const { ex, w, r } = formValues();
   if (!ex) return $('#ex').focus();
   if (!(w >= 0)) return $('#w').focus();
   if (!(r > 0)) return $('#r').focus();
-  const name = exercises().find(n => n.toLowerCase() === ex.toLowerCase()) || ex;
+  const name = [...exercises(), ...planExercises()].find(n => n.toLowerCase() === ex.toLowerCase()) || ex;
   const d = todayISO();
   (state.days[d] ||= []).push({ id: Date.now() * 1000 + Math.floor(Math.random() * 1000), ex: name, w, r });
+  $('#ex').value = $('#w').value = $('#r').value = '';
   render(); saveDay(d);
-  $('#r').focus(); $('#r').select();
 });
 
-$('#ex').addEventListener('change', () => {
-  const last = lastSet($('#ex').value.trim());
-  if (last) { $('#w').value = last.w; $('#r').value = last.r; renderPlates(); }
-});
+$('#ex').addEventListener('input', updatePlaceholders);
 
 // Plan interactions: tap an exercise to load it into the form, pick or finish a session.
 document.addEventListener('click', e => {
   const fill = e.target.closest('[data-fill]');
   if (fill) {
-    const name = fill.dataset.fill, last = lastSet(name);
-    $('#ex').value = name;
-    $('#w').value = last ? last.w : ''; $('#r').value = last ? last.r : '';
-    renderPlates();
+    $('#ex').value = fill.dataset.fill;
+    $('#w').value = $('#r').value = '';
+    updatePlaceholders();
     $('#add-form').scrollIntoView({ block: 'nearest' });
-    $(last ? '#r' : '#w').focus();
     return;
   }
   const go = e.target.closest('[data-go]');

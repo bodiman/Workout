@@ -28,7 +28,7 @@ Accessories keep their rep range all 8 weeks and can go to failure. Hit the top 
 
 ## The app
 
-- **Log**: shows the next workout in the plan. Tap an exercise to load it (with your last weight and reps), then tap *Add set*. Each exercise shows its target for the current week. Tap *Finish workout* to move on to the next one.
+- **Log**: shows the next workout in the plan. The form shows your previous set (or a default) as grey preview text; leave a field blank to use it, so repeating a set is one tap on *Add set*. Each exercise shows its target for the current week. Tap *Finish workout* to move on to the next one.
 - **Plan**: the 8 × 3 grid of workouts with finished ones checked off, plus each day's exercises.
 - **History**: every session by day.
 - **Progress**: estimated one-rep max chart per exercise, heaviest weight, session count. New PRs are flagged.
