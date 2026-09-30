@@ -85,6 +85,10 @@
   .c-label { fill: var(--muted); font: 12px var(--body); }
   .empty { padding: 20px 4px; text-align: center; }
   .status { font-size: 13px; color: var(--muted); }
+  .sync { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .sync::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+  .sync[data-kind="synced"]::before { background: var(--good); }
+  .sync[data-kind="saving"]::before, .sync[data-kind="connecting"]::before { background: var(--accent); }
   .toast { position: fixed; left: 16px; right: 16px; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); margin: 0 auto; max-width: 420px;
     background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 8px; font-size: 14px; text-align: center; }
   textarea { width: 100%; min-height: 90px; font: 13px ui-monospace, monospace; color: var(--fg); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
@@ -112,7 +116,7 @@
   <!-- LOG -->
   <section id="view-log" style="display:grid;gap:12px">
     <div>
-      <div class="eyebrow" id="today-label"></div>
+      <div class="head"><span class="eyebrow" id="today-label"></span><span class="sync" id="sync" data-kind="connecting" role="status">Connecting…</span></div>
       <h1>Today's workout</h1>
     </div>
     <div class="card" id="session"></div>
@@ -231,39 +235,113 @@ try {
 state.done ||= [];
 const cache = () => { try { localStorage.setItem(CACHE, JSON.stringify(state)); } catch {} };
 
-/* ---------- storage: private per-person db, falling back to this browser ---------- */
-let col = null; // db collection for this person, when available
-const queues = {};
-function write(key, body) {
-  cache();
-  if (!col) return;
-  const ref = col.doc(key);
-  queues[key] = (queues[key] || Promise.resolve()).then(() => body ? ref.set(body) : ref.delete())
-    .catch(e => toast(e.code === 'quota_exceeded' ? 'Storage is full. Export a backup and delete old days.' : 'Could not save. Check your connection and try again.'));
-  return queues[key];
+/* ---------- storage: private per-person db, with a local queue that syncs automatically ---------- */
+// Every change is saved in this browser first and queued. The queue is pushed to the account
+// whenever a connection is available, merging with anything logged on other devices.
+const QUEUE = 'gymlog.queue';
+let queue = { days: {}, deleted: [], settings: false }; // days[date] = 'merge' | 'replace'
+try { const q = JSON.parse(localStorage.getItem(QUEUE)); if (q && q.days) queue = { ...queue, ...q }; } catch {}
+// First run of the syncing version: queue everything that so far only lived in this browser.
+try {
+  if (!localStorage.getItem('gymlog.synced-once')) {
+    for (const d of Object.keys(state.days)) queue.days[d] ||= 'merge';
+    if (state.done.length || state.unit !== 'lb') queue.settings = true;
+  }
+} catch {}
+const saveQueue = () => { try { localStorage.setItem(QUEUE, JSON.stringify(queue)); } catch {} };
+const hasQueued = () => Object.keys(queue.days).length > 0 || queue.settings;
+
+let col = null, server = null, flushing = false, connecting = false;
+function setStatus(kind) {
+  const text = {
+    synced: 'Synced', saving: 'Saving…', offline: 'Saved on this device · syncs when you are back online',
+    local: 'Saved on this device · sign in to Claude to sync', connecting: 'Connecting…',
+  }[kind];
+  $('#status').textContent = text;
+  $('#sync').textContent = text;
+  $('#sync').dataset.kind = kind;
 }
-const saveDay = d => write('day-' + d, state.days[d]?.length ? { date: d, sets: state.days[d] } : null);
-const saveSettings = () => write('settings', { unit: state.unit, done: state.done });
+
+function queueDay(d, mode = 'merge') { if (queue.days[d] !== 'replace') queue.days[d] = mode; saveQueue(); cache(); flush(); }
+const saveDay = d => queueDay(d);
+const saveSettings = () => { queue.settings = true; saveQueue(); cache(); flush(); };
+
+// Push queued changes, merging each queued day with the account's copy of that day.
+async function flush() {
+  if (!col || !server || flushing || !hasQueued()) { if (col && server && !hasQueued()) setStatus('synced'); return; }
+  flushing = true; setStatus('saving');
+  let failed = false;
+  try {
+    for (const d of Object.keys(queue.days)) {
+      const mode = queue.days[d], del = new Set(queue.deleted);
+      const local = JSON.stringify(state.days[d] || []);
+      const byId = new Map();
+      if (mode === 'merge') for (const s of server.days[d] || []) if (!del.has(s.id)) byId.set(s.id, s);
+      for (const s of state.days[d] || []) byId.set(s.id, s);
+      const sets = [...byId.values()].sort((a, b) => a.id - b.id);
+      const ref = col.doc('day-' + d);
+      await (sets.length ? ref.set({ date: d, sets }) : ref.delete());
+      // If this day changed while saving, leave it queued so the next pass sends the newer copy.
+      if (JSON.stringify(state.days[d] || []) === local) {
+        if (sets.length) state.days[d] = sets; else delete state.days[d];
+        delete queue.days[d];
+      } else queue.days[d] = 'merge';
+      saveQueue();
+    }
+    if (!Object.keys(queue.days).length) { queue.deleted = []; saveQueue(); }
+    if (queue.settings) {
+      queue.settings = false; saveQueue();
+      try { await col.doc('settings').set({ unit: state.unit, done: state.done }); }
+      catch (e) { queue.settings = true; saveQueue(); throw e; }
+    }
+    try { localStorage.setItem('gymlog.synced-once', '1'); } catch {}
+    cache(); render();
+    setStatus(hasQueued() ? 'saving' : 'synced');
+  } catch (e) {
+    failed = true;
+    if (e.code === 'quota_exceeded') toast('Your account storage is full. Export a backup, then delete old days.');
+    setStatus(navigator.onLine ? 'saving' : 'offline');
+    setTimeout(flush, 15000); // try again shortly; nothing is lost meanwhile
+  } finally {
+    flushing = false;
+    if (!failed && hasQueued() && col) setTimeout(flush, 0);
+  }
+}
 
 async function connect() {
-  const setStatus = t => $('#status').textContent = t;
-  if (!window.claude?.use) { setStatus('Saved in this browser only.'); return; }
-  const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
-  const uid = user ? await user.id() : null;
-  if (!db || !uid) { setStatus('Saved in this browser only. Sign in to sync across devices.'); return; }
-  col = db.collection('data/users/' + uid);
-  col.onSnapshot(snap => {
-    const days = {}; let unit = state.unit, done = [];
-    for (const doc of snap.docs) {
-      const b = doc.data();
-      if (doc.id === 'settings') { unit = b.unit || unit; done = Array.isArray(b.done) ? b.done : []; }
-      else if (doc.id.startsWith('day-') && Array.isArray(b.sets)) days[b.date] = b.sets;
-    }
-    state = { unit, days, done };
-    cache(); render();
-    setStatus('Synced to your account. Only you can see this log.');
-  }, () => setStatus('Sync stopped. Changes are saved in this browser until you reload.'));
+  if (col || connecting) return flush();
+  if (!window.claude?.use) { setStatus('local'); return; }
+  connecting = true; setStatus('connecting');
+  try {
+    const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
+    const uid = user ? await user.id() : null;
+    if (!db || !uid) { setStatus('local'); return; }
+    col = db.collection('data/users/' + uid);
+    col.onSnapshot(snap => {
+      const days = {}; let unit = 'lb', done = [];
+      for (const doc of snap.docs) {
+        const b = doc.data();
+        if (doc.id === 'settings') { unit = b.unit || unit; done = Array.isArray(b.done) ? b.done : []; }
+        else if (doc.id.startsWith('day-') && Array.isArray(b.sets)) days[b.date] = b.sets;
+      }
+      server = { unit, days, done };
+      // Show the account's data, with this device's not-yet-synced changes layered on top.
+      const next = { unit, days: { ...days }, done };
+      for (const d of Object.keys(queue.days)) {
+        const del = new Set(queue.deleted), byId = new Map();
+        if (queue.days[d] === 'merge') for (const s of days[d] || []) if (!del.has(s.id)) byId.set(s.id, s);
+        for (const s of state.days[d] || []) byId.set(s.id, s);
+        if (byId.size) next.days[d] = [...byId.values()].sort((a, b) => a.id - b.id); else delete next.days[d];
+      }
+      if (queue.settings) { next.unit = state.unit; next.done = state.done; }
+      state = next;
+      cache(); render(); flush();
+    }, () => { col = null; server = null; setStatus('offline'); setTimeout(connect, 15000); });
+  } catch { setStatus('offline'); setTimeout(connect, 15000); }
+  finally { connecting = false; }
 }
+addEventListener('online', connect);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) connect(); });
 
 /* ---------- derived data ---------- */
 const allSets = () => Object.entries(state.days).flatMap(([date, ss]) => ss.map(s => ({ ...s, date })));
@@ -479,6 +557,7 @@ document.addEventListener('click', e => {
   if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'Tap to confirm'; return; }
   const d = b.dataset.date, id = Number(b.dataset.del);
   state.days[d] = (state.days[d] || []).filter(s => s.id !== id);
+  queue.deleted = [...new Set([...queue.deleted, id])];
   if (!state.days[d].length) delete state.days[d];
   render(); saveDay(d); toast('Set deleted');
 });
@@ -524,8 +603,8 @@ $('#import-yes').addEventListener('click', async () => {
   const old = Object.keys(state.days);
   state = pending; pending = null; $('#import-confirm').hidden = true;
   render();
-  for (const d of new Set([...old, ...Object.keys(state.days)])) await saveDay(d);
-  await saveSettings();
+  for (const d of new Set([...old, ...Object.keys(state.days)])) queue.days[d] = 'replace';
+  saveSettings();
   toast('Backup imported');
 });
 

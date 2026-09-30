@@ -32,4 +32,4 @@ Hit the top of the rep range on both sets, then add weight next time. The plan l
 - **Progress**: estimated one-rep max chart per exercise, heaviest weight, session count. New PRs are flagged.
 - **Settings**: lb/kg, export/import a JSON backup.
 
-When it's opened as a Claude artifact, data syncs privately to your Claude account. As a plain file, it lives in that browser's localStorage, so export a backup now and then.
+When it is opened as a Claude artifact, every change is saved on the device first and synced to your Claude account automatically, merging with anything logged on other devices. As a plain file, it lives in that browser's localStorage, so export a backup now and then.
