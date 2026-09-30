@@ -355,6 +355,7 @@ const exercises = () => [...new Set(allSets().map(s => s.ex))].sort((a, b) => a.
 const planExercises = () => [...new Set(PLAN.days.flatMap(d => d.ex.map(e => e.n)))];
 const lastSet = name => allSets().filter(s => s.ex.toLowerCase() === name.toLowerCase())
   .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id).pop();
+const sessionSets = key => allSets().filter(t => t.session === key).sort((a, b) => a.id - b.id);
 const group = sets => { const m = {}; for (const s of sets) (m[s.ex] ||= []).push(s); return Object.entries(m); };
 function prIds() {
   const best = {}, ids = new Set();
@@ -402,8 +403,8 @@ function renderLog(prs) {
 
 function renderSession() {
   const s = current(), ph = phaseFor(s.week), done = state.done.includes(s.key);
-  const todays = state.days[todayISO()] || [];
-  const count = name => todays.filter(t => t.ex.toLowerCase() === name.toLowerCase()).length;
+  const logged = sessionSets(s.key);
+  const count = name => logged.filter(t => t.ex.toLowerCase() === name.toLowerCase()).length;
   $('#session').innerHTML = `
     <div class="head">
       <div><div class="eyebrow">Week ${s.week} of ${PLAN.weeks} · ${s.when}${ph.deload ? ' · Lighter week' : ''}${done ? ' · Finished' : ''}</div><h2>${s.name}</h2><div class="muted">${s.note}</div></div>
@@ -451,7 +452,8 @@ function renderHistory(prs) {
   const days = Object.keys(state.days).filter(d => state.days[d].length).sort().reverse();
   $('#history').innerHTML = days.length
     ? days.map(d => { const ss = state.days[d].map(s => ({ ...s, date: d }));
-        return `<div class="card"><div class="head"><h2>${fmtDate(d)}</h2><span class="muted">${ss.length} sets · ${volume(ss)} ${state.unit}</span></div>
+        const labels = [...new Set(ss.map(t => SESSIONS.find(o => o.key === t.session)).filter(Boolean).map(o => `Week ${o.week} ${o.name}`))];
+        return `<div class="card"><div class="head"><div><h2>${fmtDate(d)}</h2>${labels.length ? `<div class="muted">${labels.join(' · ')}</div>` : ''}</div><span class="muted">${ss.length} set${ss.length === 1 ? "" : "s"} · ${volume(ss)} ${state.unit}</span></div>
         ${group(ss).map(([ex, g]) => `<div><div class="eyebrow">${esc(ex)}</div>${setList(g, prs)}</div>`).join('')}</div>`; }).join('')
     : `<div class="card empty"><h2>Nothing logged yet</h2><p class="muted" style="margin:0">Every workout you log appears here by day.</p></div>`;
 }
@@ -519,11 +521,10 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = fal
    Exercise: the one you just logged (until its sets are done), else the next unfinished plan exercise.
    Weight and reps: your last set of that exercise, else the empty bar and the bottom of the target range. */
 function suggestedExercise() {
-  const todays = state.days[todayISO()] || [];
-  const done = name => todays.filter(t => t.ex.toLowerCase() === name.toLowerCase()).length >= PLAN.sets;
-  const prev = todays.at(-1);
+  const s = current(), logged = sessionSets(s.key);
+  const done = name => logged.filter(t => t.ex.toLowerCase() === name.toLowerCase()).length >= PLAN.sets;
+  const prev = logged.at(-1);
   if (prev && !done(prev.ex)) return prev.ex;
-  const s = current();
   return (s.ex.find(e => !done(e.n)) || s.ex[0]).n;
 }
 function defaultReps(name) {
@@ -551,7 +552,7 @@ $('#add-form').addEventListener('submit', e => {
   if (!(r > 0)) return $('#r').focus();
   const name = [...exercises(), ...planExercises()].find(n => n.toLowerCase() === ex.toLowerCase()) || ex;
   const d = todayISO();
-  (state.days[d] ||= []).push({ id: Date.now() * 1000 + Math.floor(Math.random() * 1000), ex: name, w, r });
+  (state.days[d] ||= []).push({ id: Date.now() * 1000 + Math.floor(Math.random() * 1000), ex: name, w, r, session: current().key });
   $('#ex').value = $('#w').value = $('#r').value = '';
   render(); saveDay(d);
 });
