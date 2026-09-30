@@ -230,10 +230,9 @@ const nextSession = () => {
   const last = Math.max(-1, ...state.done.map(k => SESSIONS.findIndex(s => s.key === k)));
   return SESSIONS[Math.min(last + 1, SESSIONS.length - 1)];
 };
-let currentKey = null; // workout picked by hand on the Log tab
 // Shown workout: the one you picked, else the one you're logging today, else the next one.
 const current = () => {
-  const picked = SESSIONS.find(s => s.key === currentKey);
+  const picked = SESSIONS.find(s => s.key === state.current);
   if (picked) return picked;
   const todays = (state.days[todayISO()] || []).filter(t => t.session && !state.done.includes(t.session));
   const active = todays.length && SESSIONS.find(s => s.key === todays.at(-1).session);
@@ -241,7 +240,7 @@ const current = () => {
 };
 
 // state.days: { 'YYYY-MM-DD': [{id, ex, w, r}] }, state.done: finished session keys
-let state = { unit: 'lb', days: {}, done: [] };
+let state = { unit: 'lb', days: {}, done: [], current: null }; // current: the workout you're on, synced
 try {
   const c = JSON.parse(localStorage.getItem(CACHE));
   if (c && c.days) state = { ...state, ...c };
@@ -309,7 +308,7 @@ async function flush() {
     if (!Object.keys(queue.days).length) { queue.deleted = []; saveQueue(); }
     if (queue.settings) {
       queue.settings = false; saveQueue();
-      try { await col.doc('settings').set({ unit: state.unit, done: state.done }); }
+      try { await col.doc('settings').set({ unit: state.unit, done: state.done, current: state.current || null }); }
       catch (e) { queue.settings = true; saveQueue(); throw e; }
     }
     try { localStorage.setItem('gymlog.synced-once', '1'); } catch {}
@@ -336,22 +335,22 @@ async function connect() {
     if (!db || !uid) { setStatus('local'); return; }
     col = db.collection('data/users/' + uid);
     col.onSnapshot(snap => {
-      const days = {}; let unit = 'lb', done = [];
+      const days = {}; let unit = 'lb', done = [], current = null;
       for (const doc of snap.docs) {
         const b = structuredClone(doc.data()); // snapshots are read-only; keep an editable copy
-        if (doc.id === 'settings') { unit = b.unit || unit; done = Array.isArray(b.done) ? b.done : []; }
+        if (doc.id === 'settings') { unit = b.unit || unit; done = Array.isArray(b.done) ? b.done : []; current = b.current || null; }
         else if (doc.id.startsWith('day-') && Array.isArray(b.sets)) days[b.date] = b.sets;
       }
-      server = { unit, days, done };
+      server = { unit, days, done, current };
       // Show the account's data, with this device's not-yet-synced changes layered on top.
-      const next = { unit, days: { ...days }, done };
+      const next = { unit, days: { ...days }, done, current };
       for (const d of Object.keys(queue.days)) {
         const del = new Set(queue.deleted), byId = new Map();
         if (queue.days[d] === 'merge') for (const s of days[d] || []) if (!del.has(s.id)) byId.set(s.id, s);
         for (const s of state.days[d] || []) byId.set(s.id, s);
         if (byId.size) next.days[d] = [...byId.values()].sort((a, b) => a.id - b.id); else delete next.days[d];
       }
-      if (queue.settings) { next.unit = state.unit; next.done = state.done; }
+      if (queue.settings) { next.unit = state.unit; next.done = state.done; next.current = state.current; }
       state = next;
       cache(); render(); flush();
     }, () => { col = null; server = null; setStatus('offline'); setTimeout(connect, 15000); });
@@ -587,6 +586,7 @@ $('#add-form').addEventListener('submit', e => {
   if (!(r > 0)) return $('#r').focus();
   const name = [...exercises(), ...planExercises()].find(n => n.toLowerCase() === ex.toLowerCase()) || ex;
   const d = todayISO();
+  if (state.current !== current().key) { state.current = current().key; saveSettings(); }
   state.days[d] = [...(state.days[d] || []), { id: Date.now() * 1000 + Math.floor(Math.random() * 1000), ex: name, w, r, session: current().key }];
   $('#ex').value = $('#w').value = $('#r').value = '';
   render(); saveDay(d);
@@ -605,15 +605,15 @@ document.addEventListener('click', e => {
     return;
   }
   const go = e.target.closest('[data-go]');
-  if (go) { currentKey = go.dataset.go; render(); showView('log'); return; }
+  if (go) { state.current = go.dataset.go; render(); saveSettings(); showView('log'); return; }
   if (e.target.closest('#finish')) {
     const s = current();
-    if (state.done.includes(s.key)) { state.done = state.done.filter(k => k !== s.key); currentKey = s.key; }
-    else { state.done = [...state.done, s.key]; currentKey = null; toast(`${s.name} finished. Next up: ${nextSession().name}, week ${nextSession().week}.`); }
+    if (state.done.includes(s.key)) { state.done = state.done.filter(k => k !== s.key); state.current = s.key; }
+    else { state.done = [...state.done, s.key]; state.current = nextSession().key; toast(`${s.name} finished. Next up: ${nextSession().name}, week ${nextSession().week}.`); }
     render(); saveSettings();
   }
 });
-document.addEventListener('change', e => { if (e.target.id === 'session-pick') { currentKey = e.target.value; render(); } });
+document.addEventListener('change', e => { if (e.target.id === 'session-pick') { state.current = e.target.value; render(); saveSettings(); } });
 $('#w').addEventListener('input', renderPlates);
 
 // Edit a logged set: weight, reps, exercise, or which workout it counts toward.
@@ -676,7 +676,7 @@ $('#file').addEventListener('change', async e => {
     let days = data.days;
     if (!days && Array.isArray(data.sets)) { days = {}; for (const { date, ...s } of data.sets) (days[date] ||= []).push(s); }
     if (!days || typeof days !== 'object') throw 0;
-    pending = { unit: data.unit === 'kg' ? 'kg' : 'lb', days, done: Array.isArray(data.done) ? data.done : [] };
+    pending = { unit: data.unit === 'kg' ? 'kg' : 'lb', days, done: Array.isArray(data.done) ? data.done : [], current: data.current || null };
     const n = Object.values(days).reduce((a, s) => a + s.length, 0);
     $('#import-msg').textContent = `Replace your log with ${n} sets from this file?`;
     $('#import-confirm').hidden = false;
