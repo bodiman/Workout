@@ -4,9 +4,9 @@ A tiny, single-file workout tracker with a built-in 8-week plan. Open `index.htm
 
 ## The plan
 
-Supplemental strength work around ~6 h/week of gymnastics and ~3 h/week of climbing. Three gym days, 2 sets per exercise. Bench Press, Lat Pulldown and Zanetti Press are hit twice a week.
+Supplemental strength work around ~6 h/week of gymnastics (Mon, Tue, Thu evenings) and ~3 h/week of climbing (Wed and some Sat evenings). Three gym days, 2 sets per exercise. Bench Press, Lat Pulldown and Zanetti Press are hit twice a week.
 
-| Mon: Legs (after gymnastics) | Fri: Upper (heavy) | Sun: Full Body |
+| Mon: Legs (earlier in the day, before evening gymnastics) | Fri: Upper (heavy) | Sun: Full Body |
 |---|---|---|
 | Back Squat (heavy) | **Bench Press** (heavy) | **Paused Bench Press** (moderate) |
 | Romanian Deadlift (moderate) | **Lat Pulldown** (heavy) | **Single-Arm Lat Pulldown** (moderate) |

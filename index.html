@@ -202,7 +202,7 @@ const PLAN = {
   weeks: 8,
   sets: 2,
   days: [
-    { name: 'Legs', when: 'Mon', note: 'After gymnastics', focus: 'Squat pattern, hamstrings, lower legs', ex: [
+    { name: 'Legs', when: 'Mon', note: 'Earlier in the day, 5+ hours before gymnastics', focus: 'Squat pattern, hamstrings, lower legs', ex: [
       { n: 'Back Squat', t: 'heavy' }, { n: 'Romanian Deadlift', t: 'moderate' }, { n: 'Bulgarian Split Squat', t: 'moderate' },
       { n: 'Standing Calf Raise', t: 'acc', reps: '10–15' }, { n: 'Tibialis Raise', t: 'acc', reps: '15–20' } ] },
     { name: 'Upper', when: 'Fri', note: 'Heavy day', focus: 'Heavy pressing and pulling, shoulder care', ex: [
@@ -484,7 +484,7 @@ function renderPlan() {
       <div class="head"><h2>${d.when} · ${d.name}</h2><span class="muted">${d.note}</span></div>
       <div class="muted">${d.focus}</div>
       <ol>${d.ex.map(e => `<li>${esc(e.n)}${e.core ? '<span class="core">Core</span>' : ''} <span class="muted">${e.t === 'acc' ? e.reps : e.t === 'skill' ? 'as you perform it' : e.t + ' (phased)'}</span></li>`).join('')}</ol>
-    </div>`).join('') + `<p class="muted" style="margin:0">Gymnastics Mon, Tue and Thu (legs follow Monday's session). Climbing Wed and some Saturdays. Rows and core work are left out on purpose, since your sports already cover them.</p>`;
+    </div>`).join('') + `<p class="muted" style="margin:0">Gymnastics Mon, Tue and Thu evenings; climbing Wed and some Saturday evenings. Do Monday legs earlier in the day, well before practice. Rows and core work are left out on purpose, since your sports already cover them.</p>`;
 }
 
 function showView(name) {
