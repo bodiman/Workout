@@ -9,7 +9,7 @@ Supplemental strength work around ~6 h/week of gymnastics (Mon, Tue, Thu evening
 | Mon: Legs (earlier in the day, before evening gymnastics) | Fri: Upper (heavy) | Sun: Full Body |
 |---|---|---|
 | Back Squat (heavy) | **Bench Press** (heavy) | **Paused Bench Press** (moderate) |
-| Romanian Deadlift (moderate) | **Lat Pulldown** (heavy) | **Close-Grip Lat Pulldown** (moderate, V-handle) |
+| Romanian Deadlift (moderate) | **Lat Pulldown** (heavy) | **V-Handle Lat Pulldown** (moderate) |
 | Bulgarian Split Squat (moderate) | **Zanetti Press** | **Zanetti Press** |
 | Standing Calf Raise 10–15 | Incline Dumbbell Press 8–12 | Trap Bar Deadlift (heavy) |
 | Tibialis Raise 15–20 | Lateral Raise 12–20 | Overhead Press (moderate) |
