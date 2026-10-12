@@ -206,10 +206,10 @@ const PLAN = {
   weeks: 8,
   sets: 2,
   days: [
-    { name: 'Legs', when: 'Mon', note: 'Earlier in the day, 5+ hours before gymnastics', focus: 'Squat pattern, hamstrings, lower legs', ex: [
+    { name: 'Legs', when: 'Fri', note: 'Two days before Sunday\u2019s deadlift', focus: 'Squat pattern, hamstrings, lower legs', ex: [
       { n: 'Back Squat', t: 'heavy' }, { n: 'Romanian Deadlift', t: 'moderate' }, { n: 'Bulgarian Split Squat', t: 'moderate' },
       { n: 'Standing Calf Raise', t: 'acc', reps: '10–15' }, { n: 'Tibialis Raise', t: 'acc', reps: '15–20' } ] },
-    { name: 'Upper', when: 'Fri', note: 'Heavy day', focus: 'Heavy pressing and pulling, shoulder care', ex: [
+    { name: 'Upper', when: 'Wed', note: 'Heavy day. Lift in the morning, 8+ hours before climbing', focus: 'Heavy pressing and pulling, shoulder care', ex: [
       { n: 'Bench Press', t: 'heavy', core: true }, { n: 'Lat Pulldown', t: 'heavy', core: true }, { n: 'Zanetti Press', t: 'acc', reps: '8–12', core: true },
       { n: 'Incline Dumbbell Press', t: 'acc', reps: '8–12' }, { n: 'Lateral Raise', t: 'acc', reps: '12–20' },
       { n: 'External Rotation', t: 'acc', reps: '15–20' }, { n: 'Preacher Curl', t: 'acc', reps: '10–12' } ] },
@@ -228,7 +228,10 @@ const PLAN = {
 };
 const targetFor = (e, ph) => e.t === 'skill' ? 'quality sets' : e.t === 'acc' ? `${e.reps} reps` : `${ph[e.t]} reps`;
 const SESSIONS = [];
-for (let w = 1; w <= PLAN.weeks; w++) PLAN.days.forEach((d, i) => SESSIONS.push({ key: `p3w${w}d${i + 1}`, week: w, day: i, ...d }));
+// Week order: Wed Upper, Fri Legs, Sun Full Body. Keys keep each day's original slot so logged sets stay attached.
+const DAY_ORDER = [1, 0, 2];
+const daysInOrder = () => DAY_ORDER.map(i => PLAN.days[i]);
+for (let w = 1; w <= PLAN.weeks; w++) DAY_ORDER.forEach(i => SESSIONS.push({ key: `p3w${w}d${i + 1}`, week: w, day: i, ...PLAN.days[i] }));
 const phaseFor = w => PLAN.phases.find(p => w >= p.from && w <= p.to);
 // The workout after the furthest one you've finished (skipped workouts stay skipped).
 const nextSession = () => {
@@ -510,18 +513,18 @@ function renderPlan() {
   $('#plan-grid').innerHTML = `
     <div class="muted">${state.done.length} of ${SESSIONS.length} workouts finished. Tap a workout to open it.</div>
     <div class="weeks">
-      <span></span>${PLAN.days.map(d => `<span class="colhead">${d.when}</span>`).join('')}
+      <span></span>${daysInOrder().map(d => `<span class="colhead">${d.when}</span>`).join('')}
       ${Array.from({ length: PLAN.weeks }, (_, i) => `<span class="wk">W${i + 1}</span>` +
         SESSIONS.filter(s => s.week === i + 1).map(s => `<button type="button" data-go="${s.key}"
           class="sess${state.done.includes(s.key) ? ' done' : ''}${s.key === cur ? ' current' : ''}"
           aria-label="Week ${s.week} ${s.when} ${s.name}${state.done.includes(s.key) ? ', finished' : ''}">${s.name}</button>`).join('')).join('')}
     </div>
     <div style="display:grid;gap:6px">${PLAN.phases.map(p => `<div class="phase"><b>${p.from === p.to ? 'Week ' + p.from : `Weeks ${p.from}–${p.to}`}:</b> heavy lifts ${p.heavy}, moderate lifts ${p.moderate} reps. ${p.note}</div>`).join('')}</div>`;
-  $('#plan-days').innerHTML = PLAN.days.map(d => `<div class="card template">
+  $('#plan-days').innerHTML = daysInOrder().map(d => `<div class="card template">
       <div class="head"><h2>${d.when} · ${d.name}</h2><span class="muted">${d.note}</span></div>
       <div class="muted">${d.focus}</div>
       <ol>${d.ex.map(e => `<li>${esc(e.n)}${e.core ? '<span class="core">Core</span>' : ''} <span class="muted">${e.t === 'acc' ? e.reps : e.t === 'skill' ? 'as you perform it' : e.t + ' (phased)'}</span></li>`).join('')}</ol>
-    </div>`).join('') + `<p class="muted" style="margin:0">Gymnastics Mon, Tue and Thu evenings; climbing Wed and some Saturday evenings. Do Monday legs earlier in the day, well before practice. Rows and core work are left out on purpose, since your sports already cover them.</p>`;
+    </div>`).join('') + `<p class="muted" style="margin:0">Gymnastics Mon, Tue and Thu evenings; climbing Wed and some Saturday evenings. Lift Wednesday morning and keep Wednesday\u2019s climb the easier one; save hard projecting for Saturday. Rows and core work are left out on purpose, since your sports already cover them.</p>`;
 }
 
 function showView(name) {
