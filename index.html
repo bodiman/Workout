@@ -390,7 +390,10 @@ function recommend(name, sess = current()) {
   const ph = phaseFor(sess.week);
   const [lo, hi] = (e.t === 'acc' ? e.reps : ph[e.t]).split('–').map(Number);
   // Most recent earlier workout (or untagged day) with this exercise
-  const prior = allSets().filter(t => t.ex.toLowerCase() === name.toLowerCase() && t.session !== sess.key);
+  const all = allSets().filter(t => t.ex.toLowerCase() === name.toLowerCase() && t.session !== sess.key);
+  // Light-week sets don't show what you can do, so skip them when anything else exists.
+  const isLight = t => { const o = SESSIONS.find(x => x.key === t.session); return !!(o && phaseFor(o.week).deload); };
+  const prior = all.some(t => !isLight(t)) ? all.filter(t => !isLight(t)) : all;
   if (!prior.length) return null;
   const lastId = prior.reduce((a, t) => t.id > a.id ? t : a);
   const lastGroup = prior.filter(t => lastId.session ? t.session === lastId.session : t.date === lastId.date);
@@ -398,7 +401,7 @@ function recommend(name, sess = current()) {
   const topSets = lastGroup.filter(t => t.w === top), minReps = Math.min(...topSets.map(t => t.r));
   const goal = lo + Math.floor((hi - lo) / 2);
   const desc = `${top} × ${topSets.map(t => t.r).join(', ')}`;
-  if (ph.deload && e.t !== 'acc') return { w: roundW(top * 0.875), reps: goal, why: `Lighter week: about 87% of last time (${desc}).` };
+  if (ph.deload && e.t !== 'acc') return { w: roundW(top * 0.875), reps: goal, light: true, why: `Planned lighter week: about 87% of last time (${desc}). Stop 3 reps short of failure.` };
   const best = Math.max(...lastGroup.map(t => e1rm(t.w, t.r)));
   const fit = Math.max(0, best / (1 + goal / 30));
   if (minReps >= hi) {
@@ -492,7 +495,7 @@ function renderSession() {
       const n = count(e.n), last = lastSet(e.n), rec = recommend(e.n, s);
       return `<li><button type="button" data-fill="${esc(e.n)}">
         <span>${esc(e.n)}${e.core ? '<span class="core">Core</span>' : ''}
-          <span class="meta"><span class="nw">${PLAN.sets} × ${targetFor(e, ph)}</span>${rec ? ` · <b class="rec nw">Try ${rec.w} × ${rec.reps}</b>` : ''} · <span class="nw">${last ? `Last: ${last.w} × ${last.r}` : 'Not logged yet'}</span></span></span>
+          <span class="meta"><span class="nw">${PLAN.sets} × ${targetFor(e, ph)}</span>${rec ? ` · <b class="rec nw">Try ${rec.w} × ${rec.reps}${rec.light ? ' (light week)' : ''}</b>` : ''} · <span class="nw">${last ? `Last: ${last.w} × ${last.r}` : 'Not logged yet'}</span></span></span>
         <span class="count${n >= PLAN.sets ? ' full' : ''}">${Math.min(n, 9)}/${PLAN.sets}</span></button></li>`; }).join('')}
     ${[...new Set(logged.map(t => t.ex))].filter(n => !s.ex.some(e => e.n.toLowerCase() === n.toLowerCase())).map(n => `
       <li><button type="button" data-fill="${esc(n)}"><span>${esc(n)}<span class="meta">Extra, not in this workout's plan</span></span>
