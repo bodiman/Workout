@@ -26,6 +26,21 @@ Supplemental strength work around ~6 h/week of gymnastics (Mon, Tue, Thu evening
 
 Accessories keep their rep range all 8 weeks and can go to failure. Hit the top of the range on both sets, then add weight next time. Rows and core work are left out on purpose, since gymnastics and climbing cover them. The plan lives in the `PLAN` object at the top of the script.
 
+## Recommended weights
+
+Each exercise shows a *Try* weight × reps, and the form previews it for your first set of that exercise in a workout.
+
+- **Effort logging.** Each set records *reps left in the tank* (0, 1, 2, 3+): one tap, defaulting to the week's effort target. It can be edited later and is shown on each set.
+- **Strength estimate.** Every set becomes an estimated max: weight × (1 + (reps + reps left) / 30). Each earlier workout counts its best set, so warm-ups don't drag it down. Light-week workouts are skipped, and the last three workouts are blended 60/25/15, newest first. Sets logged before effort tracking assume their week's target.
+- **Prescription.** The weight that lands mid-range at this week's effort target, capped at +10% / −15% of your last top weight and rounded to real plate jumps (5 lb, or 2.5 lb under 50). If that's within one plate step of last time, it keeps your weight and sets the reps instead, moving up a step once you'd reach the top of the range.
+- **Light week (week 4).** About 87% of a normal week's weight, labelled "light week".
+
+| Weeks | Effort target, reps left (heavy & moderate / accessories) |
+|---|---|
+| 1–3 | 2 / 1 |
+| 4 | 3 / 2 |
+| 5–8 | 1–2 / 1 |
+
 ## The app
 
 - **Log**: shows the next workout in the plan. The form shows your previous set (or a default) as grey preview text; leave a field blank to use it, so repeating a set is one tap on *Add set*. Each exercise shows its target for the current week. Tap *Finish workout* to move on to the next one.
