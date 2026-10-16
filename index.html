@@ -15,7 +15,6 @@
   :root {
     --bg: #eef1f4; --card: #ffffff; --fg: #15191e; --muted: #5f6b78; --line: #d8dee5;
     --field: #f5f7f9; --accent: #1d5bd1; --on-accent: #ffffff; --good: #15803d; --danger: #c62828;
-    --plate-red: #d23b32; --plate-blue: #1d5bd1; --plate-yellow: #e0b20e; --plate-green: #2f8f4e; --plate-white: #f4f4f4; --plate-black: #2a2f36;
     --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
     --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
   }
@@ -23,13 +22,13 @@
     :root:not([data-theme="light"]) {
       --bg: #0f1216; --card: #181c22; --fg: #e7eaee; --muted: #95a0ad; --line: #29303a;
       --field: #11151a; --accent: #5b8ff0; --on-accent: #0b1020; --good: #3fbf6a; --danger: #ef5350;
-      --plate-white: #d9dde2; --plate-black: #444c57; color-scheme: dark;
+      color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
     --bg: #0f1216; --card: #181c22; --fg: #e7eaee; --muted: #95a0ad; --line: #29303a;
     --field: #11151a; --accent: #5b8ff0; --on-accent: #0b1020; --good: #3fbf6a; --danger: #ef5350;
-    --plate-white: #d9dde2; --plate-black: #444c57; color-scheme: dark;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   body { background: var(--bg); color: var(--fg); font: 16px/1.45 var(--body); }
@@ -64,10 +63,6 @@
   .sets .idx { color: var(--muted); font-size: 13px; width: 44px; display: inline-block; }
   .sets .num { font-size: 20px; }
   .pr { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--good); border: 1px solid var(--good); vertical-align: 2px; }
-  .plates { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 28px; font-size: 13px; color: var(--muted); }
-  .plate { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 26px; padding: 0 6px; border-radius: 4px; font: 700 14px var(--display); color: #fff; }
-  .p-red { background: var(--plate-red); } .p-blue { background: var(--plate-blue); } .p-yellow { background: var(--plate-yellow); color: #221a00; }
-  .p-green { background: var(--plate-green); } .p-white { background: var(--plate-white); color: #1a1a1a; border: 1px solid var(--line); } .p-black { background: var(--plate-black); }
   nav {
     position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--card);
     border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -154,7 +149,6 @@
         </div>
       </div>
       <div class="rec-hint" id="rec" hidden></div>
-      <div class="plates" id="plates" aria-live="polite"></div>
     </form>
     <div id="today" style="display:grid;gap:12px"></div>
   </section>
@@ -466,20 +460,7 @@ function prIds() {
   return ids;
 }
 
-/* ---------- plate math ---------- */
-const PLATES = {
-  lb: { bar: 45, list: [[45,'blue'],[35,'yellow'],[25,'green'],[10,'white'],[5,'black'],[2.5,'black']] },
-  kg: { bar: 20, list: [[25,'red'],[20,'blue'],[15,'yellow'],[10,'green'],[5,'white'],[2.5,'black'],[1.25,'black']] },
-};
-function renderPlates() {
-  const w = formValues().w, cfg = PLATES[state.unit];
-  const el = $('#plates');
-  if (!(w > cfg.bar)) { el.innerHTML = w === cfg.bar ? 'Empty bar.' : `Barbell math assumes a ${cfg.bar} ${state.unit} bar.`; return; }
-  let side = (w - cfg.bar) / 2; const out = [];
-  for (const [p, c] of cfg.list) while (side >= p - 1e-9) { out.push([p, c]); side -= p; }
-  el.innerHTML = 'Per side:' + out.map(([p, c]) => `<span class="plate p-${c}">${p}</span>`).join('') +
-    (side > 0.01 ? ` <span>+ ${round(side)} left over</span>` : '');
-}
+const BAR = { lb: 45, kg: 20 }; // default weight preview when an exercise has no history
 
 /* ---------- rendering ---------- */
 let confirmFinish = null; // workout whose Finish button is waiting for confirmation
@@ -687,14 +668,14 @@ function updatePlaceholders() {
   const name = $('#ex').value.trim() || $('#ex').placeholder, last = lastSet(name);
   const here = sessionSets(current().key).filter(t => t.ex.toLowerCase() === name.toLowerCase()).at(-1);
   const rec = here ? null : recommend(name); // first set of the workout: use the recommendation
-  $('#w').placeholder = here ? here.w : rec ? rec.w : last ? last.w : PLATES[state.unit].bar;
+  $('#w').placeholder = here ? here.w : rec ? rec.w : last ? last.w : BAR[state.unit];
   $('#r').placeholder = here ? here.r : rec ? rec.reps : last ? last.r : defaultReps(name);
   $('#rec').textContent = rec ? `Recommended: ${rec.w} ${state.unit} × ${rec.reps}. ${rec.why}` : '';
   $('#rec').hidden = !rec;
   // Always show this week's target for the exercise, even when the preview is your last set.
   const w = current(), e = w.ex.find(x => x.n.toLowerCase() === name.toLowerCase());
   $('#r-target').textContent = e && e.t !== 'skill' ? ` (${targetFor(e, phaseFor(w.week)).replace(' reps', '')})` : '';
-  renderRir(); renderPlates();
+  renderRir();
 }
 
 $('#add-form').addEventListener('submit', e => {
@@ -736,7 +717,6 @@ document.addEventListener('click', e => {
   }
 });
 document.addEventListener('change', e => { if (e.target.id === 'session-pick') { state.current = e.target.value; render(); saveSettings(); } });
-$('#w').addEventListener('input', renderPlates);
 
 // Edit a logged set: weight, reps, exercise, or which workout it counts toward.
 document.addEventListener('click', e => {
