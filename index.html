@@ -103,6 +103,13 @@
   .count { flex: 0 0 auto; font: 700 16px var(--display); font-variant-numeric: tabular-nums; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
   .count.full { color: var(--good); border-color: var(--good); }
   .confirm-box { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--accent); border-radius: 8px; }
+  .rir-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .rir-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg-btn { background: var(--field); color: var(--fg); border-radius: 0; padding: 8px 14px; font: 700 16px var(--display); min-width: 44px; }
+  .seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+  .seg-btn[aria-checked="true"] { background: var(--accent); color: var(--on-accent); }
+  .rir-tag { color: var(--muted); font-size: 13px; margin-left: 6px; }
   .rec-hint { font-size: 14px; color: var(--fg); background: var(--field); border-radius: 8px; padding: 8px 10px; }
   .rec { color: var(--accent); font-weight: 600; }
   .nw { white-space: nowrap; }
@@ -136,6 +143,15 @@
         <div><label for="w">Weight (<span class="unit">lb</span>)</label><input id="w" type="number" inputmode="decimal" step="any" min="0"></div>
         <div><label for="r">Reps<span id="r-target"></span></label><input id="r" type="number" inputmode="numeric" min="1"></div>
         <button class="shrink" id="add" type="submit">Add set</button>
+      </div>
+      <div class="rir-row">
+        <span class="rir-label" id="rir-label">Reps left in the tank</span>
+        <div class="seg" role="radiogroup" aria-labelledby="rir-label">
+          <button type="button" role="radio" class="seg-btn" data-rir="0" id="rir-0">0</button>
+          <button type="button" role="radio" class="seg-btn" data-rir="1" id="rir-1">1</button>
+          <button type="button" role="radio" class="seg-btn" data-rir="2" id="rir-2">2</button>
+          <button type="button" role="radio" class="seg-btn" data-rir="3" id="rir-3">3+</button>
+        </div>
       </div>
       <div class="rec-hint" id="rec" hidden></div>
       <div class="plates" id="plates" aria-live="polite"></div>
@@ -220,10 +236,10 @@ const PLAN = {
   ],
   // Rep targets for the phased lifts. Hit the top of the range on both sets, then add weight next time.
   phases: [
-    { from: 1, to: 3, heavy: '6–8', moderate: '10–12', note: 'Build in. Stop 2 reps short of failure on heavy and moderate lifts; accessories can go to failure.' },
-    { from: 4, to: 4, heavy: '6–8', moderate: '10–12', deload: true, note: 'Lighter week. Use about 85–90% of last week’s weights and stop 3 reps short. Let your elbows and shoulders catch up.' },
-    { from: 5, to: 6, heavy: '5–6', moderate: '8–10', note: 'Heavier. Stop 1–2 reps short of failure on heavy and moderate lifts.' },
-    { from: 7, to: 8, heavy: '3–5', moderate: '6–8', note: 'Heaviest block. Stop 1–2 reps short and never grind out a rep.' },
+    { from: 1, to: 3, heavy: '6–8', moderate: '10–12', rir: { heavy: 2, moderate: 2, acc: 1 }, note: 'Build in. Stop 2 reps short of failure on heavy and moderate lifts; accessories can go to failure.' },
+    { from: 4, to: 4, heavy: '6–8', moderate: '10–12', deload: true, rir: { heavy: 3, moderate: 3, acc: 2 }, note: 'Lighter week. Use about 85–90% of last week’s weights and stop 3 reps short. Let your elbows and shoulders catch up.' },
+    { from: 5, to: 6, heavy: '5–6', moderate: '8–10', rir: { heavy: 1.5, moderate: 1.5, acc: 1 }, note: 'Heavier. Stop 1–2 reps short of failure on heavy and moderate lifts.' },
+    { from: 7, to: 8, heavy: '3–5', moderate: '6–8', rir: { heavy: 1.5, moderate: 1.5, acc: 1 }, note: 'Heaviest block. Stop 1–2 reps short and never grind out a rep.' },
   ],
 };
 const targetFor = (e, ph) => e.t === 'skill' ? 'quality sets' : e.t === 'acc' ? `${e.reps} reps` : `${ph[e.t]} reps`;
@@ -376,40 +392,69 @@ const lastSet = name => allSets().filter(s => s.ex.toLowerCase() === name.toLowe
   .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id).pop();
 const sessionSets = key => allSets().filter(t => t.session === key).sort((a, b) => a.id - b.id);
 /* ---------- recommended weight ----------
-   Looks at the last workout where you did this exercise (not counting the one you're in):
-   - every set at your top weight reached the top of the range -> go up, sized from your
-     estimated one-rep max for a rep count mid-range, capped at +10% per session
-   - within the range, or one rep short -> same weight, chase more reps
-   - two or more reps short -> come down to a weight that fits the range
-   Lighter week: about 87% of last time. */
+   1. Each set becomes a strength estimate using reps + reps left in the tank:
+      est. max = weight × (1 + (reps + RIR) / 30). Sets logged before RIR existed assume the
+      effort target of their week.
+   2. Each earlier workout's estimate is its best set (so warm-ups don't count). Light-week
+      workouts are skipped. The last three are blended, newest weighted most (60/25/15),
+      so one bad day only nudges it.
+   3. The weight for this week is the one that lands mid-range at this week's RIR target,
+      capped at +10% / −15% of your last top weight and rounded to real plate jumps.
+      Light week: 87% of a normal week's weight. */
 const stepFor = w => state.unit === 'kg' ? (w >= 20 ? 2.5 : 1.25) : (w >= 50 ? 5 : 2.5);
 const roundW = w => { const step = stepFor(w); return Math.max(step, Math.round(w / step) * step); };
+const estMax = (w, r, rir) => w * (1 + (r + rir) / 30);
+const planEntry = (sess, name) => sess && sess.ex.find(x => x.n.toLowerCase() === name.toLowerCase());
+// Effort target for an exercise in a given workout (reps in reserve)
+function rirTarget(sess, name) {
+  const e = planEntry(sess, name);
+  return e ? phaseFor(sess.week).rir[e.t === 'skill' ? 'acc' : e.t] : 2;
+}
+const rirOf = t => t.rir ?? rirTarget(SESSIONS.find(o => o.key === t.session), t.ex);
+function strengthHistory(name, excludeKey) {
+  const sets = allSets().filter(t => t.ex.toLowerCase() === name.toLowerCase() && t.session !== excludeKey);
+  const groups = {};
+  for (const t of sets) (groups[t.session || t.date] ||= []).push(t);
+  return Object.values(groups).map(g => {
+    const o = SESSIONS.find(x => x.key === g[0].session);
+    const best = g.reduce((a, t) => estMax(t.w, t.r, rirOf(t)) > estMax(a.w, a.r, rirOf(a)) ? t : a);
+    return { last: Math.max(...g.map(t => t.id)), light: !!(o && phaseFor(o.week).deload), est: estMax(best.w, best.r, rirOf(best)),
+      top: Math.max(...g.map(t => t.w)), best };
+  }).sort((x, y) => x.last - y.last);
+}
 function recommend(name, sess = current()) {
-  const e = sess.ex.find(x => x.n.toLowerCase() === name.toLowerCase());
+  const e = planEntry(sess, name);
   if (!e || e.t === 'skill') return null;
   const ph = phaseFor(sess.week);
   const [lo, hi] = (e.t === 'acc' ? e.reps : ph[e.t]).split('–').map(Number);
-  // Most recent earlier workout (or untagged day) with this exercise
-  const all = allSets().filter(t => t.ex.toLowerCase() === name.toLowerCase() && t.session !== sess.key);
-  // Light-week sets don't show what you can do, so skip them when anything else exists.
-  const isLight = t => { const o = SESSIONS.find(x => x.key === t.session); return !!(o && phaseFor(o.week).deload); };
-  const prior = all.some(t => !isLight(t)) ? all.filter(t => !isLight(t)) : all;
-  if (!prior.length) return null;
-  const lastId = prior.reduce((a, t) => t.id > a.id ? t : a);
-  const lastGroup = prior.filter(t => lastId.session ? t.session === lastId.session : t.date === lastId.date);
-  const top = Math.max(...lastGroup.map(t => t.w));
-  const topSets = lastGroup.filter(t => t.w === top), minReps = Math.min(...topSets.map(t => t.r));
+  const hist = strengthHistory(name, sess.key);
+  const normal = hist.filter(h => !h.light), use = (normal.length ? normal : hist).slice(-3).reverse();
+  if (!use.length) return null;
+  const wts = [0.6, 0.25, 0.15].slice(0, use.length), sum = wts.reduce((a, b) => a + b, 0);
+  const est = use.reduce((a, h, i) => a + h.est * wts[i], 0) / sum;
   const goal = lo + Math.floor((hi - lo) / 2);
-  const desc = `${top} × ${topSets.map(t => t.r).join(', ')}`;
-  if (ph.deload && e.t !== 'acc') return { w: roundW(top * 0.875), reps: goal, light: true, why: `Planned lighter week: about 87% of last time (${desc}). Stop 3 reps short of failure.` };
-  const best = Math.max(...lastGroup.map(t => e1rm(t.w, t.r)));
-  const fit = Math.max(0, best / (1 + goal / 30));
-  if (minReps >= hi) {
-    const w = Math.max(roundW(Math.min(fit, top * 1.1)), top + stepFor(top));
-    return { w, reps: w - top <= stepFor(top) ? Math.max(lo, goal - 1) : goal, why: `You hit the top of the range last time (${desc}). Go up.` };
+  const rirGoal = ph.deload ? phaseFor(1).rir[e.t] : ph.rir[e.t];
+  let w = est / (1 + (goal + rirGoal) / 30);
+  if (ph.deload && e.t !== 'acc') w *= 0.875;
+  const ref = use[0].top, step = stepFor(ref);
+  w = roundW(Math.min(Math.max(w, ref * 0.85), ref * 1.1));
+  // Reps you should get at a given weight, at this week's effort target
+  const repsAt = x => Math.floor(est / x * 30 - 30 - rirGoal + 1e-9), clampR = n => Math.min(hi, Math.max(lo, n));
+  let reps = goal;
+  if (!ph.deload) {
+    if (Math.abs(w - ref) <= step) {
+      // Close to what you lifted last time: keep that weight and set the reps instead
+      const atRef = repsAt(ref);
+      if (atRef >= hi) { w = ref + step; reps = clampR(repsAt(w)); }
+      else if (atRef >= lo) { w = ref; reps = atRef; }
+      else reps = clampR(repsAt(w));
+    } else reps = clampR(repsAt(w));
   }
-  if (minReps >= lo - 1) return { w: top, reps: Math.min(minReps + 1, hi), why: `Last time: ${desc}. Same weight, aim for one more rep.` };
-  return { w: roundW(Math.min(fit, top)), reps: goal, why: `Last time: ${desc}, under the range. Drop the weight a bit.` };
+  const b = use[0].best, rirTxt = n => n === 0 ? 'at failure' : n % 1 ? '1–2 reps short of failure' : `${n} rep${n === 1 ? '' : 's'} short of failure`;
+  const basis = `Estimated max ${Math.round(est)} from your last ${use.length > 1 ? use.length + ' workouts' : 'workout'} (best: ${b.w} × ${b.r}${b.rir != null ? `, ${b.rir} left` : ''}).`;
+  return ph.deload && e.t !== 'acc'
+    ? { w, reps, light: true, rir: ph.rir[e.t], why: `${basis} Planned lighter week: about 87% of normal, stop 3 reps short.` }
+    : { w, reps, rir: ph.rir[e.t], why: `${basis} Aim for ${reps} reps, stopping ${rirTxt(ph.rir[e.t])}.` };
 }
 const group = sets => { const m = {}; for (const s of sets) (m[s.ex] ||= []).push(s); return Object.entries(m); };
 function prIds() {
@@ -441,7 +486,7 @@ let confirmFinish = null; // workout whose Finish button is waiting for confirma
 let editingId = null; // set currently open for editing
 function setList(sets, prs) {
   return '<ul class="sets">' + sets.map((s, i) => s.id === editingId ? setEditor(s, i) : `
-    <li><span><span class="idx">Set ${i + 1}</span><span class="num">${s.w}</span> ${state.unit} × <span class="num">${s.r}</span>${prs.has(s.id) ? '<span class="pr">PR</span>' : ''}</span>
+    <li><span><span class="idx">Set ${i + 1}</span><span class="num">${s.w}</span> ${state.unit} × <span class="num">${s.r}</span>${s.rir != null ? `<span class="rir-tag">${s.rir >= 3 ? '3+' : s.rir} left</span>` : ''}${prs.has(s.id) ? '<span class="pr">PR</span>' : ''}</span>
     <button class="x" data-edit="${s.id}" type="button" aria-label="Edit set ${i + 1}">Edit</button></li>`).join('') + '</ul>';
 }
 function setEditor(s, i) {
@@ -451,6 +496,9 @@ function setEditor(s, i) {
     <div class="row">
       <div><label>Weight (${state.unit})</label><input class="e-w" type="number" inputmode="decimal" step="any" min="0" value="${s.w}" aria-label="Weight"></div>
       <div><label>Reps</label><input class="e-r" type="number" inputmode="numeric" min="1" value="${s.r}" aria-label="Reps"></div>
+      <div><label>Left</label><select class="e-rir" aria-label="Reps left in the tank">
+        <option value="">?</option>${[0, 1, 2, 3].map(n => `<option value="${n}"${s.rir === n ? ' selected' : ''}>${n === 3 ? '3+' : n}</option>`).join('')}
+      </select></div>
     </div>
     <div><label>Workout</label><select class="e-session" aria-label="Workout">
       <option value="">Not part of the plan</option>
@@ -624,6 +672,16 @@ const formValues = () => {
   const ex = $('#ex').value.trim() || $('#ex').placeholder;
   return { ex, w: parseFloat($('#w').value || $('#w').placeholder), r: parseInt($('#r').value || $('#r').placeholder, 10) };
 };
+let rirPick = null; // tapped effort for the next set; null = this week's target
+const defaultRir = name => Math.round(rirTarget(current(), name));
+function renderRir() {
+  const name = $('#ex').value.trim() || $('#ex').placeholder, v = rirPick ?? Math.min(3, defaultRir(name));
+  document.querySelectorAll('.seg-btn').forEach(b => b.setAttribute('aria-checked', String(Number(b.dataset.rir) === v)));
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.seg-btn');
+  if (b) { rirPick = Number(b.dataset.rir); renderRir(); }
+});
 function updatePlaceholders() {
   $('#ex').placeholder = suggestedExercise();
   const name = $('#ex').value.trim() || $('#ex').placeholder, last = lastSet(name);
@@ -636,7 +694,7 @@ function updatePlaceholders() {
   // Always show this week's target for the exercise, even when the preview is your last set.
   const w = current(), e = w.ex.find(x => x.n.toLowerCase() === name.toLowerCase());
   $('#r-target').textContent = e && e.t !== 'skill' ? ` (${targetFor(e, phaseFor(w.week)).replace(' reps', '')})` : '';
-  renderPlates();
+  renderRir(); renderPlates();
 }
 
 $('#add-form').addEventListener('submit', e => {
@@ -648,12 +706,12 @@ $('#add-form').addEventListener('submit', e => {
   const name = [...exercises(), ...planExercises()].find(n => n.toLowerCase() === ex.toLowerCase()) || ex;
   const d = todayISO();
   if (state.current !== current().key) { state.current = current().key; saveSettings(); }
-  state.days[d] = [...(state.days[d] || []), { id: Date.now() * 1000 + Math.floor(Math.random() * 1000), ex: name, w, r, session: current().key }];
-  $('#ex').value = $('#w').value = $('#r').value = '';
+  state.days[d] = [...(state.days[d] || []), { id: Date.now() * 1000 + Math.floor(Math.random() * 1000), ex: name, w, r, rir: rirPick ?? Math.min(3, defaultRir(name)), session: current().key }];
+  $('#ex').value = $('#w').value = $('#r').value = ''; rirPick = null;
   render(); saveDay(d);
 });
 
-$('#ex').addEventListener('input', updatePlaceholders);
+$('#ex').addEventListener('input', () => { rirPick = null; updatePlaceholders(); });
 
 // Plan interactions: tap an exercise to load it into the form, pick or finish a session.
 document.addEventListener('click', e => {
@@ -692,8 +750,8 @@ document.addEventListener('click', e => {
   if (!(w >= 0)) return li.querySelector('.e-w').focus();
   if (!(r > 0)) return li.querySelector('.e-r').focus();
   const name = [...exercises(), ...planExercises()].find(n => n.toLowerCase() === ex.toLowerCase()) || ex;
-  const session = li.querySelector('.e-session').value || undefined;
-  state.days[d] = (state.days[d] || []).map(s => s.id === id ? { id, ex: name, w, r, ...(session ? { session } : {}) } : s);
+  const session = li.querySelector('.e-session').value || undefined, rirV = li.querySelector('.e-rir').value;
+  state.days[d] = (state.days[d] || []).map(s => s.id === id ? { id, ex: name, w, r, ...(rirV !== '' ? { rir: Number(rirV) } : {}), ...(session ? { session } : {}) } : s);
   editingId = null;
   render(); saveDay(d); toast('Set updated');
 });
