@@ -413,7 +413,9 @@ function strengthHistory(name, excludeKey) {
     const o = SESSIONS.find(x => x.key === g[0].session);
     const best = g.reduce((a, t) => estMax(t.w, t.r, rirOf(t)) > estMax(a.w, a.r, rirOf(a)) ? t : a);
     return { last: Math.max(...g.map(t => t.id)), light: !!(o && phaseFor(o.week).deload), est: estMax(best.w, best.r, rirOf(best)),
-      top: Math.max(...g.map(t => t.w)), best };
+      top: Math.max(...g.map(t => t.w)), best,
+      // Best set at the top weight: what to beat next time
+      topSet: g.filter(t => t.w === Math.max(...g.map(x => x.w))).reduce((a, t) => t.r > a.r ? t : a) };
   }).sort((x, y) => x.last - y.last);
 }
 function recommend(name, sess = current()) {
@@ -434,7 +436,7 @@ function recommend(name, sess = current()) {
   w = roundW(Math.min(Math.max(w, ref * 0.85), ref * 1.1));
   // Reps you should get at a given weight, at this week's effort target
   const repsAt = x => Math.floor(est / x * 30 - 30 - rirGoal + 1e-9), clampR = n => Math.min(hi, Math.max(lo, n));
-  let reps = goal;
+  let reps = goal, beat = '';
   if (!ph.deload) {
     if (Math.abs(w - ref) <= step) {
       // Close to what you lifted last time: keep that weight and set the reps instead
@@ -443,12 +445,18 @@ function recommend(name, sess = current()) {
       else if (atRef >= lo) { w = ref; reps = atRef; }
       else reps = clampR(repsAt(w));
     } else reps = clampR(repsAt(w));
+    // Beat last time: same weight means at least one more rep, unless that set was taken to failure.
+    const t = use[0].topSet;
+    if (w === ref && t.rir !== 0 && reps <= t.r) {
+      if (t.r + 1 <= hi) { reps = t.r + 1; beat = ` Beat last time (${t.w} × ${t.r}) by a rep.`; }
+      else { w = ref + step; reps = clampR(repsAt(w)); beat = ` You topped the range last time (${t.w} × ${t.r}), so go up.`; }
+    }
   }
   const b = use[0].best, rirTxt = n => n === 0 ? 'at failure' : n % 1 ? '1–2 reps short of failure' : `${n} rep${n === 1 ? '' : 's'} short of failure`;
   const basis = `Estimated max ${Math.round(est)} from your last ${use.length > 1 ? use.length + ' workouts' : 'workout'} (best: ${b.w} × ${b.r}${b.rir != null ? `, ${b.rir} left` : ''}).`;
   return ph.deload && e.t !== 'acc'
     ? { w, reps, light: true, rir: ph.rir[e.t], why: `${basis} Planned lighter week: about 87% of normal, stop 3 reps short.` }
-    : { w, reps, rir: ph.rir[e.t], why: `${basis} Aim for ${reps} reps, stopping ${rirTxt(ph.rir[e.t])}.` };
+    : { w, reps, rir: ph.rir[e.t], why: `${basis} Aim for ${reps} reps, stopping ${rirTxt(ph.rir[e.t])}.${beat}` };
 }
 const group = sets => { const m = {}; for (const s of sets) (m[s.ex] ||= []).push(s); return Object.entries(m); };
 function prIds() {

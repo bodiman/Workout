@@ -33,6 +33,7 @@ Each exercise shows a *Try* weight × reps, and the form previews it for your fi
 - **Effort logging.** Each set records *reps left in the tank* (0, 1, 2, 3+): one tap, defaulting to the week's effort target. It can be edited later and is shown on each set.
 - **Strength estimate.** Every set becomes an estimated max: weight × (1 + (reps + reps left) / 30). Each earlier workout counts its best set, so warm-ups don't drag it down. Light-week workouts are skipped, and the last three workouts are blended 60/25/15, newest first. Sets logged before effort tracking assume their week's target.
 - **Prescription.** The weight that lands mid-range at this week's effort target, capped at +10% / −15% of your last top weight and rounded to real plate jumps (5 lb, or 2.5 lb under 50). If that's within one plate step of last time, it keeps your weight and sets the reps instead, moving up a step once you'd reach the top of the range.
+- **Beat last time.** If the suggestion is the same weight as last time, it asks for at least one more rep than you did, unless you logged that set at 0 reps left. If that would pass the top of the range, it moves up a plate step instead.
 - **Light week (week 4).** About 87% of a normal week's weight, labelled "light week".
 
 | Weeks | Effort target, reps left (heavy & moderate / accessories) |
